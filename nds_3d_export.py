@@ -1,10 +1,10 @@
 #!BPY
 
 """ Registration info for Blender menus:
-Name: 'Nintendo DS GL CallList'
+Name: 'Nintendo DS CallList'
 Blender: 246
 Group: 'Export'
-Tip: 'Export for Nintendo DS DevkitPro'
+Tip: 'Export for Nintendo DS'
 """
 __author__ = "Kevin (KiNiOu) ROY"
 __url__ = ("blender", "kiniou", "Author's site, http://blog.knokorpo.fr")
@@ -39,12 +39,15 @@ from random import random
 import math
 from math import *
 
-
+from Numeric import *
 
 # Define libnds binary functions and macros
 
 def floattov16(n) :
-	return ( (n) * (1 << 12) )
+	return array(n * (1<<12) , Float32).astype(Int16)
+
+def VERTEX_PACK(x,y) :
+	return array((x & 0xFFFF) | (y << 16) , Int32)
 
 def floattov10(n) :
 	if (n>.998) :
@@ -52,21 +55,22 @@ def floattov10(n) :
 	else :
 		return (((n)*(1<<9)))
 
-def floattot16(n) :
-	return (((n) * (1 << 4)))
-
-def VERTEX_PACK(x,y) :
-	return ( ((x) & 0xFFFF) | ((y) << 16) )
-
 def NORMAL_PACK(x,y,z) :
 	return (((x) & 0x3FF) | (((y) & 0x3FF) << 10) | ((z) << 20))
 	
-def RGB15(r,g,b) :
-	return ((r)|((g)<<5)|((b)<<10))
+def floattot16(n) :
+	return (((n) * (1 << 4)))
 
 def TEXTURE_PACK(u,v) :
 	return ((u & 0xFFFF) | ((v) << 16))
 
+def RGB15(r,g,b) :
+	return ((r)|((g)<<5)|((b)<<10))
+
+FIFO_VERTEX16  = 0x23
+FIFO_NORMAL    = 0x21
+FIFO_TEX_COORD = 0x22
+FIFO_COLOR     = 0x20
 
 # a _mesh_option represents export options in the gui
 class _mesh_options (object) :
@@ -132,9 +136,15 @@ class _nds_cmdpack_vertex (object) :
 	def get_cmd_str(self):
 		return "FIFO_VERTEX16"
 
+	def get_cmd_bin(self):
+		return FIFO_VERTEX16
+	
 	def get_val_str(self):
 		return "VERTEX_PACK(floattov16(%f),floattov16(%f)) ,\nVERTEX_PACK(floattov16(%f),0)" % (self.x,self.y,self.z)
-		
+	
+	def get_val_bin(self):
+		return pack('>ii' , VERTEX_PACK(floattov16(self.x) , floattov16(self.y)) , VERTEX_PACK(floattov16(self.z) , 0))
+	
 	def get_nb_val(self):
 		return 2
 
@@ -151,9 +161,16 @@ class _nds_cmdpack_normal (object):
 	def get_cmd_str(self):
 		return "FIFO_NORMAL"
 
+	def get_cmd_bin(self):
+		return FIFO_NORMAL
+
 	def get_val_str(self):
 		return "NORMAL_PACK(floattov10(%3.6f),floattov10(%3.6f),floattov10(%3.6f))" % (self.x,self.y,self.z)
 	
+	''' TODO : write the get_val_bin function '''
+	def get_val_bin(self):
+		return 0
+
 	def get_nb_val(self):
 		return 1
 
@@ -170,8 +187,15 @@ class _nds_cmdpack_color (object):
 	def get_cmd_str(self):
 		return "FIFO_COLOR"
 
+	def get_cmd_bin(self):
+		return FIFO_COLOR
+
 	def get_val_str(self):
 		return "RGB15(%d,%d,%d)" % (self.r,self.g,self.b)
+
+	''' TODO : write the get_val_bin function '''
+	def get_val_bin(self):
+		return 0
 
 	def get_nb_val(self):
 		return 1
@@ -189,8 +213,15 @@ class _nds_cmdpack_texture (object):
 	def get_cmd_str(self):
 		return "FIFO_TEX_COORD"
 
+	def get_cmd_bin(self):
+		return FIFO_TEX_COORD
+
 	def get_val_str(self):
 		return "TEXTURE_PACK(floattot16(%3.6f),floattot16(%3.6f))" % (self.u,self.v)
+
+	''' TODO : write the get_val_bin function '''
+	def get_val_bin(self):
+		return 0
 
 	def get_nb_val(self):
 		return 1
@@ -368,7 +399,9 @@ class _nds_mesh (object) :
 #			print "!!!          TEXTURE_PACKs won't be exported           !!!"
 
 
-
+'''
+	TODO : self.cmdpack_* list must be filled with _nds_cmdpack_* classes
+'''
 	def prepare_cmdpack(self):
 		value_cnt = 0
 		type_cnt = 0
