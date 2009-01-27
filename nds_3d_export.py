@@ -71,6 +71,18 @@ FIFO_VERTEX16  = 0x23
 FIFO_NORMAL    = 0x21
 FIFO_TEX_COORD = 0x22
 FIFO_COLOR     = 0x20
+FIFO_NOP       = 0x00
+FIFO_BEGIN     = 0x40
+FIFO_END       = 0x41
+
+GL_GLBEGIN_ENUM = { 
+	'GL_TRIANGLES'      : 0 , 
+	'GL_QUADS'          : 1 , 
+	'GL_TRIANGLE_STRIP' : 2 , 
+	'GL_QUAD_STRIP'     : 3 , 
+	'GL_TRIANGLE'       : 0 , 
+	'GL_QUAD'           : 1 
+}
 
 # a _mesh_option represents export options in the gui
 class _mesh_options (object) :
@@ -126,6 +138,69 @@ class _mesh_options (object) :
 		return "File Format:%s , Exporting Texture:%s , Exporting Normals:%s , Exporting Colors:%s" % (self.format,self.uv_export,self.normals_export,self.color_export)
 
 
+class _nds_cmdpack_nop(object) :
+	def get_cmd_str(self):
+		return ( "FIFO_NOP" )
+
+	def get_cmd_bin(self):
+		return ( pack( 'b' , FIFO_NOP ) )
+
+	def get_val_str(self):
+		return ( None )
+
+	def get_val_bin(self):
+		return ( None )
+	
+	def get_nb_val(self):
+		return ( 0 )
+
+	def __str__(self):
+		return ( "FIFO_NOP" )
+
+class _nds_cmdpack_begin (object) :
+	__slots__ = 'type'
+
+	def __init__(self, type):
+		self.type = type
+
+	def get_cmd_str(self):
+		return ( "FIFO_BEGIN" )
+	
+	def get_cmd_bin(self):
+		return ( pack('b' , FIFO_BEGIN) )
+
+	def get_val_str(self):
+		return ( self.type )
+
+	def get_val_bin(self):
+		return ( pack('>i' , GL_GLBEGIN_ENUM[self.type] ) )
+
+	def get_nb_val(self):
+		return ( 1 )
+
+	def __str__(self):
+		return ( "FIFO_BEGIN (%s)" % (self.type) )
+
+class _nds_cmdpack_end(object) :
+
+	def get_cmd_str(self):
+		return ( "FIFO_END" )
+
+	def get_cmd_bin(self):
+		return ( pack('b' , FIFO_END) )
+
+	def get_val_str(self):
+		return ( None )
+
+	def get_val_bin(self):
+		return ( None )
+
+	def get_nb_val(self):
+		return ( 0 )
+
+	def __str__(self):
+		return ( "FIFO_END" )
+
 
 class _nds_cmdpack_vertex (object) :
 	__slots__ = 'x','y','z'
@@ -134,22 +209,23 @@ class _nds_cmdpack_vertex (object) :
 		self.x, self.y, self.z = vertex
 
 	def get_cmd_str(self):
-		return "FIFO_VERTEX16"
+		return ( "FIFO_VERTEX16" )
 
 	def get_cmd_bin(self):
-		return FIFO_VERTEX16
+		return ( pack('b', FIFO_VERTEX16) )
 	
 	def get_val_str(self):
-		return "VERTEX_PACK(floattov16(%f),floattov16(%f)) ,\nVERTEX_PACK(floattov16(%f),0)" % (self.x,self.y,self.z)
+		return ( "VERTEX_PACK(floattov16(%f),floattov16(%f)) ,\nVERTEX_PACK(floattov16(%f),0)" % (self.x,self.y,self.z) )
 	
 	def get_val_bin(self):
-		return pack('>ii' , VERTEX_PACK(floattov16(self.x) , floattov16(self.y)) , VERTEX_PACK(floattov16(self.z) , 0))
+		return ( pack('>ii' , VERTEX_PACK(floattov16(self.x) , floattov16(self.y)) , VERTEX_PACK(floattov16(self.z) , 0)))
 	
 	def get_nb_val(self):
-		return 2
+		return ( 2 )
 
 	def __str__(self):
-		return "(%f,%f,%f)" % (self.x,self.y,self.z)
+		return ( "FIFO_VERTEX16 (%f,%f,%f)" % (self.x,self.y,self.z) )
+
 
 
 class _nds_cmdpack_normal (object):
@@ -159,23 +235,22 @@ class _nds_cmdpack_normal (object):
 		self.x, self.y, self.z = normal
 
 	def get_cmd_str(self):
-		return "FIFO_NORMAL"
+		return ( "FIFO_NORMAL" )
 
 	def get_cmd_bin(self):
-		return FIFO_NORMAL
+		return ( pack('b' , FIFO_NORMAL) )
 
 	def get_val_str(self):
-		return "NORMAL_PACK(floattov10(%3.6f),floattov10(%3.6f),floattov10(%3.6f))" % (self.x,self.y,self.z)
+		return ( "NORMAL_PACK(floattov10(%3.6f),floattov10(%3.6f),floattov10(%3.6f))" % (self.x,self.y,self.z) )
 	
-	''' TODO : write the get_val_bin function '''
 	def get_val_bin(self):
-		return 0
+		return ( pack('>i' , NORMAL_PACK(floattov10(self.x) , floattov10(self.y) , floattov10(self.z))) )
 
 	def get_nb_val(self):
-		return 1
+		return ( 1 )
 
 	def __str__(self):
-		return "(%f,%f,%f)" % (self.x,self.y,self.z)
+		return ( "FIFO_NORMAL (%f,%f,%f)" % (self.x,self.y,self.z) )
 
 
 class _nds_cmdpack_color (object):
@@ -185,23 +260,22 @@ class _nds_cmdpack_color (object):
 		self.r,self.g,self.b = color
 	
 	def get_cmd_str(self):
-		return "FIFO_COLOR"
+		return ( "FIFO_COLOR" )
 
 	def get_cmd_bin(self):
-		return FIFO_COLOR
+		return ( pack('b' , FIFO_COLOR) )
 
 	def get_val_str(self):
-		return "RGB15(%d,%d,%d)" % (self.r,self.g,self.b)
+		return ( "RGB15(%d,%d,%d)" % (self.r,self.g,self.b) )
 
-	''' TODO : write the get_val_bin function '''
 	def get_val_bin(self):
-		return 0
+		return ( pack( '>i' , RGB15(self.r,self.g,self.b) ) )
 
 	def get_nb_val(self):
-		return 1
+		return ( 1 )
 
 	def __str__(self):
-		return "(%d,%d,%d)" % (self.r,self.g,self.b)
+		return ( "FIFO_COLOR(%d,%d,%d)" % (self.r,self.g,self.b) )
 
 
 class _nds_cmdpack_texture (object):
@@ -211,23 +285,22 @@ class _nds_cmdpack_texture (object):
 		self.u,self.v = uv
 
 	def get_cmd_str(self):
-		return "FIFO_TEX_COORD"
+		return ( "FIFO_TEX_COORD" )
 
 	def get_cmd_bin(self):
-		return FIFO_TEX_COORD
+		return ( FIFO_TEX_COORD )
 
 	def get_val_str(self):
-		return "TEXTURE_PACK(floattot16(%3.6f),floattot16(%3.6f))" % (self.u,self.v)
+		return ( "TEXTURE_PACK(floattot16(%3.6f),floattot16(%3.6f))" % (self.u,self.v) )
 
-	''' TODO : write the get_val_bin function '''
 	def get_val_bin(self):
-		return 0
+		return ( pack( '>i' , TEXTURE_PACK( floattot16(self.u) , floattot16(self.v) ) ) )
 
 	def get_nb_val(self):
-		return 1
+		return ( 1 )
 		
 	def __str__(self):
-		return "(%f,%f)" % (self.u,self.v)
+		return ( "TEXTURE_PACK(%f,%f)" % (self.u,self.v) )
 
 
 class _nds_mesh_vertex (object):
@@ -240,7 +313,19 @@ class _nds_mesh_vertex (object):
 		self.color = None
 
 	def __str__(self):
-		return " vertex=%s uv=%s normal=%s color=%s " % (self.vertex , self.uv , self.normal , self.color)
+		return "MESH_VERTEX(vertex=%s uv=%s normal=%s color=%s)" % (self.vertex , self.uv , self.normal , self.color)
+
+
+''' TODO : the _nds_cmdpack_list class is needed by the prepare_cmdpack function'''
+
+class _nds_cmdpack_list (object) :
+	__slots__ = 'commands' , 'parameters'
+
+	def __init__(self):
+		type = []
+		value = []
+	
+	def
 
 
 class _nds_mesh (object) :
