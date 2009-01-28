@@ -51,21 +51,21 @@ def VERTEX_PACK(x,y) :
 
 def floattov10(n) :
 	if (n>.998) :
-		return 0x1FF 
+		return array(0x1FF , Int16)
 	else :
-		return (((n)*(1<<9)))
+		return array(n * (1<<9) , Float32).astype(Int16) 
 
 def NORMAL_PACK(x,y,z) :
-	return (((x) & 0x3FF) | (((y) & 0x3FF) << 10) | ((z) << 20))
+	return array((x & 0x3FF) | ((y & 0x3FF) << 10) | (z << 20) , Int32)
 	
 def floattot16(n) :
-	return (((n) * (1 << 4)))
+	return array( n * (1 << 4) , Float32).astype(Int16)
 
 def TEXTURE_PACK(u,v) :
-	return ((u & 0xFFFF) | ((v) << 16))
+	return array( (u & 0xFFFF) | (v << 16) , Int32)
 
 def RGB15(r,g,b) :
-	return ((r)|((g)<<5)|((b)<<10))
+	return array(r | (g << 5) | (b <<10 ) , Int32)
 
 FIFO_VERTEX16  = 0x23
 FIFO_NORMAL    = 0x21
@@ -316,20 +316,75 @@ class _nds_mesh_vertex (object):
 		return "MESH_VERTEX(vertex=%s uv=%s normal=%s color=%s)" % (self.vertex , self.uv , self.normal , self.color)
 
 
-''' TODO : the _nds_cmdpack_list class is needed by the prepare_cmdpack function'''
-
-class _nds_cmdpack_list (object) :
-	__slots__ = 'commands' , 'parameters'
+class _nds_cmdpack (object) :
+	__slots__ = 'commands'
 
 	def __init__(self):
-		type = []
-		value = []
+		commands = []
+
+	def append(self, cmd):
+		if self.len() == 4:
+			return ( False )
+		else :
+			commands.append(cmd)
+			return ( True )
+
+	def terminate(self):
+		if (self.len() < 4):
+			for i in range(self.len(),4)
+				commands.append(_nds_cmdpack_nop())
+
+	def len(self):
+		return ( len(self.commands) )
 	
-	def
+	def get_nb_param(self):
+		if self.len() == 0:
+			return ( 0 )
+		else :
+			nb = 1
+
+		for i in self.commands:
+			nb += i.get_nb_val()
+
+		return ( nb )
+
+	def __str__(self):
+		str = ""
+		for i in commands:
+			str += "%s\n" % (i)
+		return ( str )
+
+
+
+class _nds_cmdpack_list (object): 
+	__slots__ = 'list'
+	
+	def __init__(self):
+		list = [ _nds_cmdpack() ]
+
+	def append(self,cmd):
+		if ( list[-1].append(cmd) == False ):
+			list.append( _nds_cmdpack() )
+			list[-1].append(cmd)
+
+	def len(self):
+		return ( len(self.list) )
+
+	def get_nb_param(self):
+		nb = 0
+		for i in self.list :
+			nb += i.get_nb_param()
+
+		return ( nb )
+
+	def __str__
+		str = ""
+		for i in list :
+			str += "%s\n" % ( i )
 
 
 class _nds_mesh (object) :
-	__slots__ = 'name', 'quads' , 'triangles' , 'texture' , 'cmdpack_type' , 'cmdpack_value' , 'cmdpack_count' , 'uv_export' , 'color_export' , 'options', 'final_cmdpack'
+	__slots__ = 'name', 'quads' , 'triangles' , 'texture' , 'cmdpack_list' , 'cmdpack_count' , 'uv_export' , 'color_export' , 'options', 'final_cmdpack'
 	
 	
 	def __init__(self,mesh_options):
@@ -337,8 +392,7 @@ class _nds_mesh (object) :
 		self.options = mesh_options
 		self.quads = []
 		self.triangles = []
-		self.cmdpack_type = []
-		self.cmdpack_value = []
+		self.cmdpack_list = _nds_cmdpack_list()
 		self.cmdpack_count = 0
 		if (self.options.uv_export and self.options.mesh_data.faceUV ): self.uv_export = True
 		else: self.uv_export = False
@@ -492,101 +546,107 @@ class _nds_mesh (object) :
 	TODO : self.cmdpack_* list must be filled with _nds_cmdpack_* classes
 '''
 	def prepare_cmdpack(self):
-		value_cnt = 0
-		type_cnt = 0
-		cmd_cnt = 0
-		color_backup = ""
-		if (len(self.quads) > 0):
-			self.cmdpack_type.append("FIFO_BEGIN")		
-			self.cmdpack_value.append("GL_QUADS")
-			cmd_cnt += 1
-			value_cnt += 1
-		
-			for i in range(len(self.quads)):
-				v = self.quads[i]
+		#Begin Quads list if there are at least 1 quads
+		if ( len(self.quads) > 0 ):
+			self.cmdpack_list.append()
 
-				#if (self.color_export and v.color != None and color_backup==v.color.get_val_str()) :
-				if (self.color_export and v.color != None ) :
-					self.cmdpack_type.append(v.color.get_cmd_str())
-					self.cmdpack_value.append(v.color.get_val_str())
-					value_cnt += 1
-					cmd_cnt += 1
-					#color_backup = v.color.get_val_str()
-							
-				if (self.uv_export and v.uv != None) :
-					self.cmdpack_type.append(v.uv.get_cmd_str())
-					self.cmdpack_value.append(v.uv.get_val_str())
-					value_cnt += 1
-					cmd_cnt += 1
 
-				if (v.normal != None):
-					self.cmdpack_type.append(v.normal.get_cmd_str())
-					self.cmdpack_value.append(v.normal.get_val_str())
-					value_cnt += 1
-					cmd_cnt += 1
-
-				if (v.vertex != None) :
-					self.cmdpack_type.append(v.vertex.get_cmd_str())
-					self.cmdpack_value.append(v.vertex.get_val_str())
-					value_cnt += 2
-					cmd_cnt += 1
-
-			self.cmdpack_type.append("FIFO_END")		
-			self.cmdpack_value.append("")
-			cmd_cnt += 1
-
-		if (len(self.triangles) > 0):
-			self.cmdpack_type.append("FIFO_BEGIN")		
-			self.cmdpack_value.append("GL_TRIANGLE")
-			cmd_cnt += 1
-			value_cnt += 1
-		
-			for i in range(len(self.triangles)):
-				v = self.triangles[i]
-
-				#if (self.color_export and v.color != None and color_backup!=v.color.get_val_str()) :
-				if (self.color_export and v.color != None ) :
-					self.cmdpack_type.append(v.color.get_cmd_str())
-					self.cmdpack_value.append(v.color.get_val_str())
-					value_cnt += 1
-					cmd_cnt += 1
-					#color_backup = v.color.get_val_str()
-				
-			
-				if (self.uv_export and v.uv != None) :
-					self.cmdpack_type.append(v.uv.get_cmd_str())
-					self.cmdpack_value.append(v.uv.get_val_str())
-					value_cnt += 1
-					cmd_cnt += 1
-
-				if (v.normal != None):
-					self.cmdpack_type.append(v.normal.get_cmd_str())
-					self.cmdpack_value.append(v.normal.get_val_str())
-					value_cnt += 1
-					cmd_cnt += 1
-
-				if (v.vertex != None) :
-					self.cmdpack_type.append(v.vertex.get_cmd_str())
-					self.cmdpack_value.append(v.vertex.get_val_str())
-					value_cnt += 2
-					cmd_cnt += 1
-
-			self.cmdpack_type.append("FIFO_END")		
-			# Note : there is no value associated with a FIFO_END command but we put empty to be symetric with the cmdpack_type list
-			# This value will be filtered out when writing the file
-			self.cmdpack_value.append("") 
-			cmd_cnt += 1
-
-		nb_nop = (int)(ceil(cmd_cnt/4.0)*4 - cmd_cnt)
-		
-		if (nb_nop > 0):
-			for i in range(nb_nop):
-				self.cmdpack_type.append("FIFO_NOP")		
-				# Note : FIFO_NOP command are dummy command to fill the FIFO_COMMAND_PACK and as no value like FIFO_END command
-				self.cmdpack_value.append("")
-				cmd_cnt += 1
-				
-		self.cmdpack_count = value_cnt + (int)(ceil(cmd_cnt/4.0))
+#	def prepare_cmdpack(self):
+#		value_cnt = 0
+#		type_cnt = 0
+#		cmd_cnt = 0
+#		color_backup = ""
+#		if (len(self.quads) > 0):
+#			self.cmdpack_type.append("FIFO_BEGIN")		
+#			self.cmdpack_value.append("GL_QUADS")
+#			cmd_cnt += 1
+#			value_cnt += 1
+#		
+#			for i in range(len(self.quads)):
+#				v = self.quads[i]
+#
+#				#if (self.color_export and v.color != None and color_backup==v.color.get_val_str()) :
+#				if (self.color_export and v.color != None ) :
+#					self.cmdpack_type.append(v.color.get_cmd_str())
+#					self.cmdpack_value.append(v.color.get_val_str())
+#					value_cnt += 1
+#					cmd_cnt += 1
+#					#color_backup = v.color.get_val_str()
+#							
+#				if (self.uv_export and v.uv != None) :
+#					self.cmdpack_type.append(v.uv.get_cmd_str())
+#					self.cmdpack_value.append(v.uv.get_val_str())
+#					value_cnt += 1
+#					cmd_cnt += 1
+#
+#				if (v.normal != None):
+#					self.cmdpack_type.append(v.normal.get_cmd_str())
+#					self.cmdpack_value.append(v.normal.get_val_str())
+#					value_cnt += 1
+#					cmd_cnt += 1
+#
+#				if (v.vertex != None) :
+#					self.cmdpack_type.append(v.vertex.get_cmd_str())
+#					self.cmdpack_value.append(v.vertex.get_val_str())
+#					value_cnt += 2
+#					cmd_cnt += 1
+#
+#			self.cmdpack_type.append("FIFO_END")		
+#			self.cmdpack_value.append("")
+#			cmd_cnt += 1
+#
+#		if (len(self.triangles) > 0):
+#			self.cmdpack_type.append("FIFO_BEGIN")		
+#			self.cmdpack_value.append("GL_TRIANGLE")
+#			cmd_cnt += 1
+#			value_cnt += 1
+#		
+#			for i in range(len(self.triangles)):
+#				v = self.triangles[i]
+#
+#				#if (self.color_export and v.color != None and color_backup!=v.color.get_val_str()) :
+#				if (self.color_export and v.color != None ) :
+#					self.cmdpack_type.append(v.color.get_cmd_str())
+#					self.cmdpack_value.append(v.color.get_val_str())
+#					value_cnt += 1
+#					cmd_cnt += 1
+#					#color_backup = v.color.get_val_str()
+#				
+#			
+#				if (self.uv_export and v.uv != None) :
+#					self.cmdpack_type.append(v.uv.get_cmd_str())
+#					self.cmdpack_value.append(v.uv.get_val_str())
+#					value_cnt += 1
+#					cmd_cnt += 1
+#
+#				if (v.normal != None):
+#					self.cmdpack_type.append(v.normal.get_cmd_str())
+#					self.cmdpack_value.append(v.normal.get_val_str())
+#					value_cnt += 1
+#					cmd_cnt += 1
+#
+#				if (v.vertex != None) :
+#					self.cmdpack_type.append(v.vertex.get_cmd_str())
+#					self.cmdpack_value.append(v.vertex.get_val_str())
+#					value_cnt += 2
+#					cmd_cnt += 1
+#
+#			self.cmdpack_type.append("FIFO_END")		
+#			# Note : there is no value associated with a FIFO_END command but we put empty to be symetric with the cmdpack_type list
+#			# This value will be filtered out when writing the file
+#			self.cmdpack_value.append("") 
+#			cmd_cnt += 1
+#
+#		nb_nop = (int)(ceil(cmd_cnt/4.0)*4 - cmd_cnt)
+#		
+#		if (nb_nop > 0):
+#			for i in range(nb_nop):
+#				self.cmdpack_type.append("FIFO_NOP")		
+#				# Note : FIFO_NOP command are dummy command to fill the FIFO_COMMAND_PACK and as no value like FIFO_END command
+#				self.cmdpack_value.append("")
+#				cmd_cnt += 1
+#				
+#		self.cmdpack_count = value_cnt + (int)(ceil(cmd_cnt/4.0))
 		
 
 
