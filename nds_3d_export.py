@@ -288,7 +288,7 @@ class _nds_cmdpack_texture (object):
 		return ( "FIFO_TEX_COORD" )
 
 	def get_cmd_bin(self):
-		return ( FIFO_TEX_COORD )
+		return ( pack('b' , FIFO_TEX_COORD) )
 
 	def get_val_str(self):
 		return ( "TEXTURE_PACK(floattot16(%3.6f),floattot16(%3.6f))" % (self.u,self.v) )
@@ -352,9 +352,13 @@ class _nds_mesh (object) :
 		#self.rescale_mesh(mesh_options.mesh_data)
 		if self.uv_export : self.rescale_texture()
 		if self.color_export : self.rescale_color()
+
 		self.prepare_cmdpack()
 		self.construct_cmdpack()
+		
+		''' TODO : remove the save function from __init__ because it's not about initialisation'''
 		self.save()
+		''' TODO : move the save_tex function in the save function'''
 		if (self.options.texfile_export) : self.save_tex()
 		
 
