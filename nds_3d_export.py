@@ -40,6 +40,7 @@ import math
 from math import *
 
 from Numeric import *
+from struct import *
 
 # Define libnds binary functions and macros
 
@@ -84,16 +85,28 @@ GL_GLBEGIN_ENUM = {
 	'GL_QUAD'           : 1 
 }
 
+EXPORT_OPTIONS = {
+	'FORMAT_TEXT'   : 1,
+	'FORMAT_BINARY' : 0,
+	'TEXCOORDS'     : 1,
+	'NO_TEXTCOORDS' : 0,
+	'COLORS'        : 1,
+	'NO_COLORS'     : 0,
+	'NORMALS'       : 1,
+	'NO_NORMALS'    : 0
+}
+
 # a _mesh_option represents export options in the gui
 class _mesh_options (object) :
 	__slots__ = 'format' , 'uv_export' ,'texfile_export' , 'normals_export' , 'color_export' , 'mesh_data' , 'mesh_name', 'texture_data' , 'texture_list' , 'texture_w' , 'texture_h', 'dir_path'
 
 	def __init__(self,mesh_data,dir_path) :
-		self.format = 1 			#Which format for the export? 0->Binary, 1->C-Style
-		self.uv_export = 1 			#Do we export uv coordinates? 0->No, 1->Yes
-		self.normals_export = 1     #Do we export normals coordinates ? 0->No, 1->Yes
-		self.color_export = 1		#Do we export color attributes ? 0->No, 1->Yes
-		self.mesh_data = mesh_data  #The Blender Mesh data
+		self.format         = EXPORT_OPTIONS['FORMAT_TEXT']   #Which format for the export? FORMAT_BINARY->Binary, FORMAT_TEXT->C-Style
+		self.uv_export      = EXPORT_OPTIONS['TEXCOORDS']       #Do we export uv coordinates? NO_TEXCOORDS->No, TEXCOORDS->Yes
+		self.normals_export = EXPORT_OPTIONS['NORMALS']         #Do we export normals coordinates ? NO_NORMALS->No, NORMALS->Yes
+		self.color_export   = EXPORT_OPTIONS['COLORS']          #Do we export color attributes ? COLORS->No, NO_COLORS->Yes
+
+		self.mesh_data = mesh_data #The Blender Mesh data
 		self.mesh_name = mesh_data.name #The Blender Mesh name
 		self.list_textures() #Retrieve all texture bound to the Blender mesh
 		self.texture_w = 128
@@ -139,168 +152,193 @@ class _mesh_options (object) :
 
 
 class _nds_cmdpack_nop(object) :
-	def get_cmd_str(self):
-		return ( "FIFO_NOP" )
+	__slots__ = 'cmd','val'
 
-	def get_cmd_bin(self):
-		return ( pack( 'b' , FIFO_NOP ) )
+	def __init__(self):
+		self.cmd = {}
+		self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']] = "FIFO_NOP"
+		self.cmd[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( 'b' , FIFO_NOP )
+		
 
-	def get_val_str(self):
-		return ( None )
+		self.val = {}
+		self.val[EXPORT_OPTIONS['FORMAT_TEXT']] = None
+		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = None
+		
+	def get_cmd(self,format):
+		return ( self.cmd[format] )
 
-	def get_val_bin(self):
-		return ( None )
-	
+	def get_val(self,format):
+		return ( self.val[format] )
+
 	def get_nb_val(self):
 		return ( 0 )
 
 	def __str__(self):
-		return ( "FIFO_NOP" )
+		return ( "%s , %s" % ( self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']], self.val[EXPORT_OPTIONS['FORMAT_TEXT']]) )
 
 class _nds_cmdpack_begin (object) :
-	__slots__ = 'type'
+	__slots__ = 'cmd','val'
 
-	def __init__(self, type):
-		self.type = type
+	def __init__(self,begin_opt):
+		self.cmd = {}
+		self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']] = "FIFO_BEGIN"
+		self.cmd[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( 'b' , FIFO_BEGIN )
+		
 
-	def get_cmd_str(self):
-		return ( "FIFO_BEGIN" )
+		self.val = {}
+		self.val[EXPORT_OPTIONS['FORMAT_TEXT']] = begin_opt
+		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack('>i' , GL_GLBEGIN_ENUM[begin_opt] )
+		
+
+	def get_cmd(self,format):
+		return ( self.cmd[format] )
 	
-	def get_cmd_bin(self):
-		return ( pack('b' , FIFO_BEGIN) )
-
-	def get_val_str(self):
-		return ( self.type )
-
-	def get_val_bin(self):
-		return ( pack('>i' , GL_GLBEGIN_ENUM[self.type] ) )
+	def get_val(self,format):
+		return ( self.val[format] )
 
 	def get_nb_val(self):
 		return ( 1 )
 
 	def __str__(self):
-		return ( "FIFO_BEGIN (%s)" % (self.type) )
+		return ( "%s , %s" % ( self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']], self.val[EXPORT_OPTIONS['FORMAT_TEXT']]) )
 
 class _nds_cmdpack_end(object) :
 
-	def get_cmd_str(self):
-		return ( "FIFO_END" )
+	__slots__ = 'cmd','val'
 
-	def get_cmd_bin(self):
-		return ( pack('b' , FIFO_END) )
+	def __init__(self):
+		self.cmd = {}
+		self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']] = "FIFO_END"
+		self.cmd[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( 'b' , FIFO_END )
+		
 
-	def get_val_str(self):
-		return ( None )
+		self.val = {}
+		self.val[EXPORT_OPTIONS['FORMAT_TEXT']] = None
+		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = None
+		
 
-	def get_val_bin(self):
-		return ( None )
+	def get_cmd(self,format):
+		return ( self.cmd[format] )
+
+	def get_val(self,format):
+		return ( self.val[format] )
 
 	def get_nb_val(self):
 		return ( 0 )
 
 	def __str__(self):
-		return ( "FIFO_END" )
+		return ( "%s , %s" % ( self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']], self.val[EXPORT_OPTIONS['FORMAT_TEXT']]) )
 
 
 class _nds_cmdpack_vertex (object) :
-	__slots__ = 'x','y','z'
+	__slots__ = 'cmd','val'
 	
 	def __init__(self,vertex=(0.0,0.0,0.0)):
-		self.x, self.y, self.z = vertex
+		x, y, z = vertex
+		self.cmd = {}
+		self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']] = "FIFO_VERTEX16" 
+		self.cmd[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( 'b' , FIFO_VERTEX16 )
+		
+		
+		self.val = {}
+		self.val[EXPORT_OPTIONS['FORMAT_TEXT']] = "VERTEX_PACK(floattov16(%f),floattov16(%f)) , VERTEX_PACK(floattov16(%f),0)" % (x,y,z) 
+		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack('>ii' , VERTEX_PACK(floattov16(x) , floattov16(y)) , VERTEX_PACK(floattov16(z) , 0))
+		
 
-	def get_cmd_str(self):
-		return ( "FIFO_VERTEX16" )
+	def get_cmd(self, format):
+		return ( self.cmd[format] )
 
-	def get_cmd_bin(self):
-		return ( pack('b', FIFO_VERTEX16) )
-	
-	def get_val_str(self):
-		return ( "VERTEX_PACK(floattov16(%f),floattov16(%f)) ,\nVERTEX_PACK(floattov16(%f),0)" % (self.x,self.y,self.z) )
-	
-	def get_val_bin(self):
-		return ( pack('>ii' , VERTEX_PACK(floattov16(self.x) , floattov16(self.y)) , VERTEX_PACK(floattov16(self.z) , 0)))
-	
+	def get_val(self, format):
+		return ( self.val[format] )
+
 	def get_nb_val(self):
 		return ( 2 )
 
 	def __str__(self):
-		return ( "FIFO_VERTEX16 (%f,%f,%f)" % (self.x,self.y,self.z) )
-
+		return ( "%s , %s" % ( self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']], self.val[EXPORT_OPTIONS['FORMAT_TEXT']]) )
 
 
 class _nds_cmdpack_normal (object):
-	__slots__ = 'x','y','z'
+	__slots__ = 'cmd','val'
 
 	def __init__(self,normal=(0.0,0.0,0.0)):
-		self.x, self.y, self.z = normal
-
-	def get_cmd_str(self):
-		return ( "FIFO_NORMAL" )
-
-	def get_cmd_bin(self):
-		return ( pack('b' , FIFO_NORMAL) )
-
-	def get_val_str(self):
-		return ( "NORMAL_PACK(floattov10(%3.6f),floattov10(%3.6f),floattov10(%3.6f))" % (self.x,self.y,self.z) )
+		x, y, z = normal
+		self.cmd = {}
+		self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']] = "FIFO_NORMAL" 
+		self.cmd[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( 'b' , FIFO_NORMAL )
+		
+		
+		self.val = {}
+		self.val[EXPORT_OPTIONS['FORMAT_TEXT']] =  "NORMAL_PACK(floattov10(%3.6f),floattov10(%3.6f),floattov10(%3.6f))" % (x,y,z) 
+		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack('>i' , NORMAL_PACK(floattov10(x) , floattov10(y) , floattov10(z)))
 	
-	def get_val_bin(self):
-		return ( pack('>i' , NORMAL_PACK(floattov10(self.x) , floattov10(self.y) , floattov10(self.z))) )
 
+	def get_cmd(self, format):
+		return ( self.cmd[format] )
+
+	def get_val(self, format):
+		return ( self.val[format] )
+	
 	def get_nb_val(self):
 		return ( 1 )
 
 	def __str__(self):
-		return ( "FIFO_NORMAL (%f,%f,%f)" % (self.x,self.y,self.z) )
-
+		return ( "%s , %s" % ( self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']], self.val[EXPORT_OPTIONS['FORMAT_TEXT']]) )
 
 class _nds_cmdpack_color (object):
-	__slots__ = 'r','g','b'
+	__slots__ = 'cmd' , 'val'
 
 	def __init__(self,color=(0,0,0)):
-		self.r,self.g,self.b = color
+		r,g,b = color
+		self.cmd = {}
+		self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']] = "FIFO_COLOR" 
+		self.cmd[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( 'b' , FIFO_COLOR )
+		
+		
+		self.val = {}
+		self.val[EXPORT_OPTIONS['FORMAT_TEXT']] =  "RGB15(%d,%d,%d)" % (r,g,b)
+		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( '>i' , RGB15(r,g,b) )
+		
+
+	def get_cmd(self, format):
+		return ( self.cmd[format] )
+
+	def get_val(self, format):
+		return ( self.val[format] )
 	
-	def get_cmd_str(self):
-		return ( "FIFO_COLOR" )
-
-	def get_cmd_bin(self):
-		return ( pack('b' , FIFO_COLOR) )
-
-	def get_val_str(self):
-		return ( "RGB15(%d,%d,%d)" % (self.r,self.g,self.b) )
-
-	def get_val_bin(self):
-		return ( pack( '>i' , RGB15(self.r,self.g,self.b) ) )
-
 	def get_nb_val(self):
 		return ( 1 )
 
 	def __str__(self):
-		return ( "FIFO_COLOR(%d,%d,%d)" % (self.r,self.g,self.b) )
+		return ( "%s , %s" % ( self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']], self.val[EXPORT_OPTIONS['FORMAT_TEXT']]) )
 
 
 class _nds_cmdpack_texture (object):
-	__slots__ = 'u','v'
+	__slots__ = 'cmd' , 'val'
 	
 	def __init__(self,uv=(0.0,0.0)):
-		self.u,self.v = uv
+		u,v = uv
+		self.cmd = {}
+		self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']] = "FIFO_TEX_COORD" 
+		self.cmd[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( 'b' , FIFO_TEX_COORD )
+	
+		
+		self.val = {}
+		self.val[EXPORT_OPTIONS['FORMAT_TEXT']] =  "TEXTURE_PACK(floattot16(%3.6f),floattot16(%3.6f))" % (u,v) 
+		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( '>i' , TEXTURE_PACK( floattot16(u) , floattot16(v) ) )
+		
 
-	def get_cmd_str(self):
-		return ( "FIFO_TEX_COORD" )
+	def get_cmd(self, format):
+		return ( self.cmd[format] )
 
-	def get_cmd_bin(self):
-		return ( pack('b' , FIFO_TEX_COORD) )
-
-	def get_val_str(self):
-		return ( "TEXTURE_PACK(floattot16(%3.6f),floattot16(%3.6f))" % (self.u,self.v) )
-
-	def get_val_bin(self):
-		return ( pack( '>i' , TEXTURE_PACK( floattot16(self.u) , floattot16(self.v) ) ) )
+	def get_val(self, format):
+		return ( self.val[format] )
 
 	def get_nb_val(self):
 		return ( 1 )
 		
 	def __str__(self):
-		return ( "TEXTURE_PACK(%f,%f)" % (self.u,self.v) )
+		return ( "%s , %s" % ( self.cmd[EXPORT_OPTIONS['FORMAT_TEXT']], self.val[EXPORT_OPTIONS['FORMAT_TEXT']]) )
 
 
 class _nds_mesh_vertex (object):
@@ -320,19 +358,19 @@ class _nds_cmdpack (object) :
 	__slots__ = 'commands'
 
 	def __init__(self):
-		commands = []
+		self.commands = []
 
-	def append(self, cmd):
+	def add(self, cmd):
 		if self.len() == 4:
 			return ( False )
 		else :
-			commands.append(cmd)
+			self.commands.append(cmd)
 			return ( True )
 
 	def terminate(self):
 		if (self.len() < 4):
-			for i in range(self.len(),4)
-				commands.append(_nds_cmdpack_nop())
+			for i in range(self.len(),4):
+				self.commands.append(_nds_cmdpack_nop())
 
 	def len(self):
 		return ( len(self.commands) )
@@ -348,9 +386,34 @@ class _nds_cmdpack (object) :
 
 		return ( nb )
 
-	def __str__(self):
+	def get_pack(self,format):
 		str = ""
-		for i in commands:
+		str += self.get_cmd(format)
+		str += self.get_val(format)
+		return ( str )
+
+	def get_cmd(self,format):
+		cmd = ""
+		c = self.commands
+		if ( format == EXPORT_OPTIONS['FORMAT_TEXT'] ) :
+			cmd += "FIFO_COMMAND_PACK( %s , %s , %s , %s ),\n" % ( c[0].get_cmd(format) ,c[1].get_cmd(format) ,c[2].get_cmd(format) ,c[3].get_cmd(format) )
+		elif ( format == EXPORT_OPTIONS['FORMAT_BINARY'] ) :
+ 			cmd += c[3].get_cmd(format) + c[2].get_cmd(format) + c[1].get_cmd(format) + c[0].get_cmd(format)
+		return cmd
+
+	def get_val(self,format):
+		val = ""
+		for i in self.commands:
+			if ( i.get_val(format) != None ):
+				val += i.get_val(format)	
+				if ( format == EXPORT_OPTIONS['FORMAT_TEXT'] ) :
+					val += ",\n"
+
+		return val
+
+	def __str__(self):
+		str = "CMD_PACK ELEMENT:\n"
+		for i in self.commands:
 			str += "%s\n" % (i)
 		return ( str )
 
@@ -360,27 +423,31 @@ class _nds_cmdpack_list (object):
 	__slots__ = 'list'
 	
 	def __init__(self):
-		list = [ _nds_cmdpack() ]
+		self.list = [ _nds_cmdpack() ]
 
-	def append(self,cmd):
-		if ( list[-1].append(cmd) == False ):
-			list.append( _nds_cmdpack() )
-			list[-1].append(cmd)
+	def add(self,cmd):
+		if ( self.list[-1].add(cmd) == False ):
+			self.list.append( _nds_cmdpack() )
+			self.list[-1].add(cmd)
 
 	def len(self):
 		return ( len(self.list) )
 
-	def get_nb_param(self):
+	def get_nb_params(self):
 		nb = 0
 		for i in self.list :
 			nb += i.get_nb_param()
 
 		return ( nb )
 
-	def __str__
-		str = ""
-		for i in list :
+	def terminate(self):
+		self.list[-1].terminate()
+
+	def __str__(self):
+		str = "COMMAND_PACK LIST\n"
+		for i in self.list :
 			str += "%s\n" % ( i )
+		return ( str )
 
 
 class _nds_mesh (object) :
@@ -393,6 +460,7 @@ class _nds_mesh (object) :
 		self.quads = []
 		self.triangles = []
 		self.cmdpack_list = _nds_cmdpack_list()
+		print self.cmdpack_list
 		self.cmdpack_count = 0
 		if (self.options.uv_export and self.options.mesh_data.faceUV ): self.uv_export = True
 		else: self.uv_export = False
@@ -400,20 +468,14 @@ class _nds_mesh (object) :
 		else: self.color_export = False
 		
 		self.name = mesh_options.mesh_name
-		self.get_quads(mesh_options.mesh_data)
-		self.get_triangles(mesh_options.mesh_data)
-		#self.get_texture(mesh_options.mesh_data)
+		self.get_faces(mesh_options.mesh_data)
 		#self.rescale_mesh(mesh_options.mesh_data)
-		if self.uv_export : self.rescale_texture()
-		if self.color_export : self.rescale_color()
 
 		self.prepare_cmdpack()
 		self.construct_cmdpack()
 		
-		''' TODO : remove the save function from __init__ because it's not about initialisation'''
-		self.save()
-		''' TODO : move the save_tex function in the save function'''
-		if (self.options.texfile_export) : self.save_tex()
+		""" TODO : remove the save function from __init__ because it's not about initialisation"""
+		#self.save()
 		
 
 	def save_tex(self) :
@@ -441,239 +503,113 @@ class _nds_mesh (object) :
 			nds_mesh_vertex.normal = _nds_cmdpack_normal(v.no)
 			#we copy vertex's UV coordinates information only if there is UV layer for the current mesh
 			if (self.uv_export) : 
-				#print face.uv[i]
-				nds_mesh_vertex.uv = _nds_cmdpack_texture( (face.uv[i].x,1-face.uv[i].y))
+				nds_mesh_vertex.uv = _nds_cmdpack_texture( ( face.uv[i].x * self.options.texture_w , (1-face.uv[i].y) * self.options.texture_h))
 			#we copy vertex's color only if there is Color Layer for the current mesh
 			if (self.color_export) : 
-				nds_mesh_vertex.color = _nds_cmdpack_color( (face.col[i].r,face.col[i].g,face.col[i].b) )
+				nds_mesh_vertex.color = _nds_cmdpack_color( (face.col[i].r * 32 / 256 , face.col[i].g * 32 / 256, face.col[i].b * 32 / 256) )
 			#finally, we append the nds_mesh_vertex in the quads list
 			face_list.append(nds_mesh_vertex)
 		
-	def get_quads(self,blender_mesh):
+	def get_faces(self,blender_mesh):
 		for face in blender_mesh.faces :
 			#we process the face only if this is a quad
 			if (len(face) == 4) :
 				self.add_nds_mesh_vertex(face,self.quads)
-
-	def get_triangles(self,blender_mesh):
-		for face in blender_mesh.faces :
 			#we process the face only if this is a triangle
-			if (len(face) == 3) :
+			elif (len(face) == 3) :
 				self.add_nds_mesh_vertex(face,self.triangles)
-	
-	def rescale_mesh(self,blender_mesh):
-		max_x=max_y=max_z=min_x=min_y=min_z=max_l=0
-		for v in blender_mesh.verts:
-			if v.co[0]>max_x : max_x = v.co[0]
-			elif v.co[0]<min_x : min_x = v.co[0]
-			if v.co[1]>max_y : max_y = v.co[1]
-			elif v.co[1]<min_y : min_y = v.co[1]
-			if v.co[2]>max_z : max_z = v.co[2]
-			elif v.co[2]<min_z : min_z = v.co[2]
-		if (abs(max_x-min_x) > max_l) : max_l = abs(max_x-min_x)
-		if (abs(max_y-min_y) > max_l) : max_l = abs(max_y-min_y)
-		if (abs(max_z-min_z) > max_l) : max_l = abs(max_z-min_z)
-		
-		if (len(self.quads)>0):
-			for f in self.quads:
-				v=f.vertex
-				f.vertex.x = v.x/max_l
-				f.vertex.y = v.y/max_l
-				f.vertex.z = v.z/max_l
-		if (len(self.triangles)>0):
-			for f in self.triangles:
-				v=f.vertex
-				f.vertex.x = v.x/max_l
-				f.vertex.y = v.y/max_l
-				f.vertex.z = v.z/max_l
-			
-			
-	def rescale_texture(self):
-		if (len(self.quads)>0):
-			for f in self.quads:
-				uv=f.uv
-				f.uv.u = uv.u * self.options.texture_w
-				f.uv.v = uv.v * self.options.texture_h
-		if (len(self.triangles)>0):				
-			for f in self.triangles:
-				uv=f.uv
-				f.uv.u = uv.u * self.options.texture_w
-				f.uv.v = uv.v * self.options.texture_h
-			
-	def rescale_color(self):
-		if (len(self.quads)>0):
-			for f in self.quads:
-				c=f.color
-				f.color.r = c.r * 32 / 256
-				f.color.g = c.g * 32 / 256
-				f.color.b = c.b * 32 / 256
-		if (len(self.triangles)>0):				
-			for f in self.triangles:
-				c=f.color
-				f.color.r = c.r * 32 / 256
-				f.color.g = c.g * 32 / 256
-				f.color.b = c.b * 32 / 256
-		
-		
-#	def get_texture(self,blender_mesh):
-#		self.texture = ("",0,0)
 
-#		materials = blender_mesh.materials
+	"""TODO : I think there is a need to rescale the mesh because the range in the NDS is [-8.0, 8.0[ but I need to do some tests before"""
+#	def rescale_mesh(self,blender_mesh):
+#		max_x=max_y=max_z=min_x=min_y=min_z=max_l=0
+#		for v in blender_mesh.verts:
+#			if v.co[0]>max_x : max_x = v.co[0]
+#			elif v.co[0]<min_x : min_x = v.co[0]
+#			if v.co[1]>max_y : max_y = v.co[1]
+#			elif v.co[1]<min_y : min_y = v.co[1]
+#			if v.co[2]>max_z : max_z = v.co[2]
+#			elif v.co[2]<min_z : min_z = v.co[2]
+#		if (abs(max_x-min_x) > max_l) : max_l = abs(max_x-min_x)
+#		if (abs(max_y-min_y) > max_l) : max_l = abs(max_y-min_y)
+#		if (abs(max_z-min_z) > max_l) : max_l = abs(max_z-min_z)
 #		
-#		#Here we take the first material in the mesh
-#		tex = []
-#		if len(materials)>0 :
-#			tex = materials[0].getTextures()
-
-#		#Here we take the first Texture of Image Type
-#		img_found = 0
-#		if len(tex)>0 :
-#			for t in tex :
-#				if t != None :
-#					if (t.tex.getType() == 'Image') :
-#						image = t.tex.getImage()
-#						img_found = 1
-#						break
-#		
-#		if (img_found == 1):
-#			self.texture = (image.getName(),image.getSize()[0],image.getSize()[1])
-#		else :
-#			print "!!!Warning : Cannot find any textures bound to the mesh!!!"
-#			print "!!!          TEXTURE_PACKs won't be exported           !!!"
-
-
-'''
-	TODO : self.cmdpack_* list must be filled with _nds_cmdpack_* classes
-'''
+#		if (len(self.quads)>0):
+#			for f in self.quads:
+#				v=f.vertex
+#				f.vertex.x = v.x/max_l
+#				f.vertex.y = v.y/max_l
+#				f.vertex.z = v.z/max_l
+#		if (len(self.triangles)>0):
+#			for f in self.triangles:
+#				v=f.vertex
+#				f.vertex.x = v.x/max_l
+#				f.vertex.y = v.y/max_l
+#				f.vertex.z = v.z/max_l
+			
 	def prepare_cmdpack(self):
-		#Begin Quads list if there are at least 1 quads
-		if ( len(self.quads) > 0 ):
-			self.cmdpack_list.append()
+		#If there is at least 1 quad
+		if ( len(self.quads) > 0 ) :
+			#Begin Quads list
+			self.cmdpack_list.add( _nds_cmdpack_begin('GL_QUADS') )
 
+			for i in range( len(self.quads) ) :
 
-#	def prepare_cmdpack(self):
-#		value_cnt = 0
-#		type_cnt = 0
-#		cmd_cnt = 0
-#		color_backup = ""
-#		if (len(self.quads) > 0):
-#			self.cmdpack_type.append("FIFO_BEGIN")		
-#			self.cmdpack_value.append("GL_QUADS")
-#			cmd_cnt += 1
-#			value_cnt += 1
-#		
-#			for i in range(len(self.quads)):
-#				v = self.quads[i]
-#
-#				#if (self.color_export and v.color != None and color_backup==v.color.get_val_str()) :
-#				if (self.color_export and v.color != None ) :
-#					self.cmdpack_type.append(v.color.get_cmd_str())
-#					self.cmdpack_value.append(v.color.get_val_str())
-#					value_cnt += 1
-#					cmd_cnt += 1
-#					#color_backup = v.color.get_val_str()
-#							
-#				if (self.uv_export and v.uv != None) :
-#					self.cmdpack_type.append(v.uv.get_cmd_str())
-#					self.cmdpack_value.append(v.uv.get_val_str())
-#					value_cnt += 1
-#					cmd_cnt += 1
-#
-#				if (v.normal != None):
-#					self.cmdpack_type.append(v.normal.get_cmd_str())
-#					self.cmdpack_value.append(v.normal.get_val_str())
-#					value_cnt += 1
-#					cmd_cnt += 1
-#
-#				if (v.vertex != None) :
-#					self.cmdpack_type.append(v.vertex.get_cmd_str())
-#					self.cmdpack_value.append(v.vertex.get_val_str())
-#					value_cnt += 2
-#					cmd_cnt += 1
-#
-#			self.cmdpack_type.append("FIFO_END")		
-#			self.cmdpack_value.append("")
-#			cmd_cnt += 1
-#
-#		if (len(self.triangles) > 0):
-#			self.cmdpack_type.append("FIFO_BEGIN")		
-#			self.cmdpack_value.append("GL_TRIANGLE")
-#			cmd_cnt += 1
-#			value_cnt += 1
-#		
-#			for i in range(len(self.triangles)):
-#				v = self.triangles[i]
-#
-#				#if (self.color_export and v.color != None and color_backup!=v.color.get_val_str()) :
-#				if (self.color_export and v.color != None ) :
-#					self.cmdpack_type.append(v.color.get_cmd_str())
-#					self.cmdpack_value.append(v.color.get_val_str())
-#					value_cnt += 1
-#					cmd_cnt += 1
-#					#color_backup = v.color.get_val_str()
-#				
-#			
-#				if (self.uv_export and v.uv != None) :
-#					self.cmdpack_type.append(v.uv.get_cmd_str())
-#					self.cmdpack_value.append(v.uv.get_val_str())
-#					value_cnt += 1
-#					cmd_cnt += 1
-#
-#				if (v.normal != None):
-#					self.cmdpack_type.append(v.normal.get_cmd_str())
-#					self.cmdpack_value.append(v.normal.get_val_str())
-#					value_cnt += 1
-#					cmd_cnt += 1
-#
-#				if (v.vertex != None) :
-#					self.cmdpack_type.append(v.vertex.get_cmd_str())
-#					self.cmdpack_value.append(v.vertex.get_val_str())
-#					value_cnt += 2
-#					cmd_cnt += 1
-#
-#			self.cmdpack_type.append("FIFO_END")		
-#			# Note : there is no value associated with a FIFO_END command but we put empty to be symetric with the cmdpack_type list
-#			# This value will be filtered out when writing the file
-#			self.cmdpack_value.append("") 
-#			cmd_cnt += 1
-#
-#		nb_nop = (int)(ceil(cmd_cnt/4.0)*4 - cmd_cnt)
-#		
-#		if (nb_nop > 0):
-#			for i in range(nb_nop):
-#				self.cmdpack_type.append("FIFO_NOP")		
-#				# Note : FIFO_NOP command are dummy command to fill the FIFO_COMMAND_PACK and as no value like FIFO_END command
-#				self.cmdpack_value.append("")
-#				cmd_cnt += 1
-#				
-#		self.cmdpack_count = value_cnt + (int)(ceil(cmd_cnt/4.0))
-		
+				v = self.quads[i]
 
+				if ( self.color_export and v.color != None ) :
+					self.cmdpack_list.add(v.color)
+
+				if (self.uv_export and v.uv != None) :
+					self.cmdpack_list.add(v.uv)
+
+				if (v.normal != None):
+					self.cmdpack_list.add(v.normal)
+
+				if (v.vertex != None) :
+					self.cmdpack_list.add(v.vertex)
+			#End Quads list
+			self.cmdpack_list.add( _nds_cmdpack_end() )
+
+		#If there is at least 1 triangle
+		if ( len(self.triangles) > 0 ) :
+			#Begin Triangles list
+			self.cmdpack_list.add( _nds_cmdpack_begin('GL_TRIANGLES') )
+
+			for i in range( len(self.triangles) ) :
+
+				v = self.triangles[i]
+
+				if ( self.color_export and v.color != None ) :
+					self.cmdpack_list.add(v.color)
+
+				if (self.uv_export and v.uv != None) :
+					self.cmdpack_list.add(v.uv)
+
+				if (v.normal != None):
+					self.cmdpack_list.add(v.normal)
+
+				if (v.vertex != None) :
+					self.cmdpack_list.add(v.vertex)
+			#End Quads list
+			self.cmdpack_list.add( _nds_cmdpack_end() )
+
+		#Fill the remaining cmd slots with NOP commands
+		self.cmdpack_list.terminate()
 
 	def construct_cmdpack(self):
-		print "construct the fifo command pack"
-		self.final_cmdpack = []
-		fifo_cmdpack = ""
-		idx_stamp = 0
-		for i in range(len(self.cmdpack_type)):
-			if (i%4==0) : 
-				self.final_cmdpack.append("")
-				idx_stamp = len(self.final_cmdpack) - 1
-				fifo_cmdpack += self.cmdpack_type[i]
-			else : 
-				fifo_cmdpack += " , " + self.cmdpack_type[i]
-			
-			if (self.cmdpack_value[i] != "") : self.final_cmdpack.append(self.cmdpack_value[i])
-			
-			if (i%4==3) :
-				self.final_cmdpack[idx_stamp] = "FIFO_COMMAND_PACK( " + fifo_cmdpack + ")"
-				fifo_cmdpack = ""
-				
-		#for i in final_cmdpack :
-		#	print i
-		
+
+		self.final_cmdpack = ""
+
+		if (self.options.format == EXPORT_OPTIONS['FORMAT_TEXT']) :
+			self.final_cmdpack += "u32 %s[] = {\n%d,\n" % ( self.options.mesh_name , self.cmdpack_list.get_nb_params() )
+
+		for cp in self.cmdpack_list.list :
+			self.final_cmdpack += cp.get_pack(self.options.format)
+
+		print self.final_cmdpack
 
 	def save(self) :
+		return
 		f = open(self.options.get_final_path_mesh(),"w")
 		f.write("u32 %s[] = {\n%d,\n" % (self.options.mesh_name,self.cmdpack_count))
 		i=0
@@ -683,6 +619,8 @@ class _nds_mesh (object) :
 			i+=1
 		f.write("};\n")
 		f.close();
+		
+		if (self.options.texfile_export) : self.save_tex()
 
 	def __str__(self):
 		return "NDS Mesh [%s], Faces = %d (Quads=%d, Triangles=%d), Texture=%s" % (self.name,len(self.quads)/4+len(self.triangles)/3,len(self.quads)/4,len(self.triangles)/3,repr((self.options.get_final_path_tex(), self.options.texture_w,self.options.texture_h)) )
@@ -826,6 +764,7 @@ class _menu_nds_export (object) :
 		elif evt==24 : self.mesh_options[0].texture_h = 8
 		elif evt==99 : 
 			nds_export = _nds_mesh(self.mesh_options[0])
+			nds_export.save()
 			print nds_export
 			Draw.Exit()                 # exit when user presses ESC
 			return
