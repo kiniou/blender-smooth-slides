@@ -443,6 +443,12 @@ class _nds_cmdpack_list (object):
 	def terminate(self):
 		self.list[-1].terminate()
 
+	def get_pack(self,format):
+		str = ""
+		for cp in self.list:
+			str += cp.get_pack(format)
+		return ( str )
+
 	def __str__(self):
 		str = "COMMAND_PACK LIST\n"
 		for i in self.list :
@@ -601,23 +607,18 @@ class _nds_mesh (object) :
 		self.final_cmdpack = ""
 
 		if (self.options.format == EXPORT_OPTIONS['FORMAT_TEXT']) :
-			self.final_cmdpack += "u32 %s[] = {\n%d,\n" % ( self.options.mesh_name , self.cmdpack_list.get_nb_params() )
-
-		for cp in self.cmdpack_list.list :
-			self.final_cmdpack += cp.get_pack(self.options.format)
+			s = "u32 %s[] = {\n%d,\n%s" % ( self.options.mesh_name , self.cmdpack_list.get_nb_params() , self.cmdpack_list.get_pack(self.options.format) )
+			self.final_cmdpack += s[0:-2]
+			self.final_cmdpack += "\n}\n"
+		elif (self.options.format == EXPORT_OPTIONS['FORMAT_BINARY']) : 
+			self.final_cmdpack += pack( '>i' , self.cmdpack_list.get_nb_params())
+			self.final_cmdpack += self.cmdpack_list.get_pack(self.options.format)
 
 		print self.final_cmdpack
 
 	def save(self) :
-		return
 		f = open(self.options.get_final_path_mesh(),"w")
-		f.write("u32 %s[] = {\n%d,\n" % (self.options.mesh_name,self.cmdpack_count))
-		i=0
-		for l in self.final_cmdpack:
-			if (i != (len(self.final_cmdpack)-1)) : f.write(l + ",\n")
-			else : f.write(l + "\n")
-			i+=1
-		f.write("};\n")
+		f.write(self.final_cmdpack)
 		f.close();
 		
 		if (self.options.texfile_export) : self.save_tex()
