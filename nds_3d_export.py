@@ -187,7 +187,7 @@ class _nds_cmdpack_begin (object) :
 
 		self.val = {}
 		self.val[EXPORT_OPTIONS['FORMAT_TEXT']] = begin_opt
-		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack('>i' , GL_GLBEGIN_ENUM[begin_opt] )
+		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack('<i' , GL_GLBEGIN_ENUM[begin_opt] )
 		
 
 	def get_cmd(self,format):
@@ -242,7 +242,7 @@ class _nds_cmdpack_vertex (object) :
 		
 		self.val = {}
 		self.val[EXPORT_OPTIONS['FORMAT_TEXT']] = "VERTEX_PACK(floattov16(%f),floattov16(%f)) , VERTEX_PACK(floattov16(%f),0)" % (x,y,z) 
-		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack('>ii' , VERTEX_PACK(floattov16(x) , floattov16(y)) , VERTEX_PACK(floattov16(z) , 0))
+		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack('<ii' , VERTEX_PACK(floattov16(x) , floattov16(y)) , VERTEX_PACK(floattov16(z) , 0))
 		
 
 	def get_cmd(self, format):
@@ -270,7 +270,7 @@ class _nds_cmdpack_normal (object):
 		
 		self.val = {}
 		self.val[EXPORT_OPTIONS['FORMAT_TEXT']] =  "NORMAL_PACK(floattov10(%3.6f),floattov10(%3.6f),floattov10(%3.6f))" % (x,y,z) 
-		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack('>i' , NORMAL_PACK(floattov10(x) , floattov10(y) , floattov10(z)))
+		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack('<i' , NORMAL_PACK(floattov10(x) , floattov10(y) , floattov10(z)))
 	
 
 	def get_cmd(self, format):
@@ -297,7 +297,7 @@ class _nds_cmdpack_color (object):
 		
 		self.val = {}
 		self.val[EXPORT_OPTIONS['FORMAT_TEXT']] =  "RGB15(%d,%d,%d)" % (r,g,b)
-		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( '>i' , RGB15(r,g,b) )
+		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( '<i' , RGB15(r,g,b) )
 		
 
 	def get_cmd(self, format):
@@ -325,7 +325,7 @@ class _nds_cmdpack_texture (object):
 		
 		self.val = {}
 		self.val[EXPORT_OPTIONS['FORMAT_TEXT']] =  "TEXTURE_PACK(floattot16(%3.6f),floattot16(%3.6f))" % (u,v) 
-		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( '>i' , TEXTURE_PACK( floattot16(u) , floattot16(v) ) )
+		self.val[EXPORT_OPTIONS['FORMAT_BINARY']] = pack( '<i' , TEXTURE_PACK( floattot16(u) , floattot16(v) ) )
 		
 
 	def get_cmd(self, format):
@@ -398,7 +398,7 @@ class _nds_cmdpack (object) :
 		if ( format == EXPORT_OPTIONS['FORMAT_TEXT'] ) :
 			cmd += "FIFO_COMMAND_PACK( %s , %s , %s , %s ),\n" % ( c[0].get_cmd(format) ,c[1].get_cmd(format) ,c[2].get_cmd(format) ,c[3].get_cmd(format) )
 		elif ( format == EXPORT_OPTIONS['FORMAT_BINARY'] ) :
- 			cmd += c[3].get_cmd(format) + c[2].get_cmd(format) + c[1].get_cmd(format) + c[0].get_cmd(format)
+ 			cmd += c[0].get_cmd(format) + c[1].get_cmd(format) + c[2].get_cmd(format) + c[3].get_cmd(format)
 		return cmd
 
 	def get_val(self,format):
@@ -526,31 +526,31 @@ class _nds_mesh (object) :
 				self.add_nds_mesh_vertex(face,self.triangles)
 
 	"""TODO : I think there is a need to rescale the mesh because the range in the NDS is [-8.0, 8.0[ but I need to do some tests before"""
-#	def rescale_mesh(self,blender_mesh):
-#		max_x=max_y=max_z=min_x=min_y=min_z=max_l=0
-#		for v in blender_mesh.verts:
-#			if v.co[0]>max_x : max_x = v.co[0]
-#			elif v.co[0]<min_x : min_x = v.co[0]
-#			if v.co[1]>max_y : max_y = v.co[1]
-#			elif v.co[1]<min_y : min_y = v.co[1]
-#			if v.co[2]>max_z : max_z = v.co[2]
-#			elif v.co[2]<min_z : min_z = v.co[2]
-#		if (abs(max_x-min_x) > max_l) : max_l = abs(max_x-min_x)
-#		if (abs(max_y-min_y) > max_l) : max_l = abs(max_y-min_y)
-#		if (abs(max_z-min_z) > max_l) : max_l = abs(max_z-min_z)
-#		
-#		if (len(self.quads)>0):
-#			for f in self.quads:
-#				v=f.vertex
-#				f.vertex.x = v.x/max_l
-#				f.vertex.y = v.y/max_l
-#				f.vertex.z = v.z/max_l
-#		if (len(self.triangles)>0):
-#			for f in self.triangles:
-#				v=f.vertex
-#				f.vertex.x = v.x/max_l
-#				f.vertex.y = v.y/max_l
-#				f.vertex.z = v.z/max_l
+	def rescale_mesh(self,blender_mesh):
+		max_x=max_y=max_z=min_x=min_y=min_z=max_l=0
+		for v in blender_mesh.verts:
+			if v.co[0]>max_x : max_x = v.co[0]
+			elif v.co[0]<min_x : min_x = v.co[0]
+			if v.co[1]>max_y : max_y = v.co[1]
+			elif v.co[1]<min_y : min_y = v.co[1]
+			if v.co[2]>max_z : max_z = v.co[2]
+			elif v.co[2]<min_z : min_z = v.co[2]
+		if (abs(max_x-min_x) > max_l) : max_l = abs(max_x-min_x)
+		if (abs(max_y-min_y) > max_l) : max_l = abs(max_y-min_y)
+		if (abs(max_z-min_z) > max_l) : max_l = abs(max_z-min_z)
+		
+		if (len(self.quads)>0):
+			for f in self.quads:
+				v=f.vertex
+				f.vertex.x = v.x/max_l
+				f.vertex.y = v.y/max_l
+				f.vertex.z = v.z/max_l
+		if (len(self.triangles)>0):
+			for f in self.triangles:
+				v=f.vertex
+				f.vertex.x = v.x/max_l
+				f.vertex.y = v.y/max_l
+				f.vertex.z = v.z/max_l
 			
 	def prepare_cmdpack(self):
 		#If there is at least 1 quad
@@ -609,12 +609,12 @@ class _nds_mesh (object) :
 		if (self.options.format == EXPORT_OPTIONS['FORMAT_TEXT']) :
 			s = "u32 %s[] = {\n%d,\n%s" % ( self.options.mesh_name , self.cmdpack_list.get_nb_params() , self.cmdpack_list.get_pack(self.options.format) )
 			self.final_cmdpack += s[0:-2]
-			self.final_cmdpack += "\n}\n"
+			self.final_cmdpack += "\n};\n"
 		elif (self.options.format == EXPORT_OPTIONS['FORMAT_BINARY']) : 
-			self.final_cmdpack += pack( '>i' , self.cmdpack_list.get_nb_params())
+			self.final_cmdpack += pack( '<i' , self.cmdpack_list.get_nb_params())
 			self.final_cmdpack += self.cmdpack_list.get_pack(self.options.format)
 
-		print self.final_cmdpack
+		#print self.final_cmdpack
 
 	def save(self) :
 		f = open(self.options.get_final_path_mesh(),"w")
