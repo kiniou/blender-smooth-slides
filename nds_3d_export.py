@@ -109,8 +109,8 @@ class _mesh_options (object) :
 		self.mesh_data = mesh_data #The Blender Mesh data
 		self.mesh_name = mesh_data.name #The Blender Mesh name
 		self.list_textures() #Retrieve all texture bound to the Blender mesh
-		self.texture_w = 128
-		self.texture_h = 128
+		#self.texture_w = 128
+		#self.texture_h = 128
 		self.dir_path = dir_path
 		self.texfile_export = 0
 
@@ -133,10 +133,32 @@ class _mesh_options (object) :
 						image = t.tex.getImage()
 						self.texture_list.append(t)
 						img_found = 1
-						print "%s %dx%d" % (image.getName(),image.getSize()[0],image.getSize()[1])
+						#print "%s %dx%d" % (image.getName(),image.getSize()[0],image.getSize()[1])
 		
 		if (img_found == 1):
-			self.texture_data.append(self.texture_list[0].tex.getImage())
+			image = self.texture_list[0].tex.getImage()
+			self.texture_data.append(image)
+			
+			w = image.getSize()[0]
+			h = image.getSize()[1]
+			ratio = float(w)/float(h)
+			print "Texture %s %dx%d ratio=%f" % (image.getName(),w,h,ratio)
+			
+			if (w > 128) : w = 128
+			if (w < 8) : w = 8
+				
+			if (h > 128) : h = 128
+			if (h < 8) : h = 8
+
+			if (ratio < 1.0) :
+				w = h * (1/round(1/ratio))
+				print "ratio <  1 : Texture %s %dx%d" % (image.getName(),w,h)
+			else :
+				h = w / round(ratio)
+				print "ratio >= 1 :Texture %s %dx%d" % (image.getName(),w,h)
+				
+			self.texture_w = w
+			self.texture_h = h			
 		else :
 			print "!!!Warning : Cannot find any textures bound to the mesh!!!"
 			print "!!!          TEXTURE_PACKs won't be exported           !!!"
@@ -509,7 +531,8 @@ class _nds_mesh (object) :
 			nds_mesh_vertex.normal = _nds_cmdpack_normal(v.no)
 			#we copy vertex's UV coordinates information only if there is UV layer for the current mesh
 			if (self.uv_export) : 
-				nds_mesh_vertex.uv = _nds_cmdpack_texture( ( face.uv[i].x * self.options.texture_w , (1-face.uv[i].y) * self.options.texture_h))
+				if (face.uv[i].x >= 0 and face.uv[i].y >= 0):
+					nds_mesh_vertex.uv = _nds_cmdpack_texture( ( face.uv[i].x * self.options.texture_w , (1-face.uv[i].y) * self.options.texture_h))
 			#we copy vertex's color only if there is Color Layer for the current mesh
 			if (self.color_export) : 
 				nds_mesh_vertex.color = _nds_cmdpack_color( (face.col[i].r * 32 / 256 , face.col[i].g * 32 / 256, face.col[i].b * 32 / 256) )
