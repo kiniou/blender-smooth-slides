@@ -1,0 +1,9 @@
+Blender Scripts by Kevin 'Kiniou' Roy
+=====================================
+
+Here is a set of Blender Scripts sorted by type:
+./export/
+    This directory contains scripts which enable different kind of format to be exported
+./import/
+    This is the approximatively the same thing as above but inverted
+
