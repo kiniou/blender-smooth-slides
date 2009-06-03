@@ -6,43 +6,66 @@ scene = GameLogic.getCurrentScene()
 #get Objects
 control_obj = co.getOwner()
 
-obj_list = scene.getObjectList()
+obj = scene.getObjectList()
 
 
 #get Sensors
-play_sensor = co.getSensor('arm_play')
-stop_sensor = co.getSensor('arm_stop')
-check_anim_sensor = co.getSensor('check_anim')
+sens = {}
+sens['play'] = co.getSensor('arm_play')
+sens['stop'] = co.getSensor('arm_stop')
+sens['check_anim'] = co.getSensor('check_anim')
 
 #get Actuators
-action_act = co.getActuator('bounce_anim')
+act = {}
+act['anim_slide'] = co.getActuator('anim_slide')
 
 #get Properties
-state = getattr(control_obj,'state')
-prev_state = getattr(control_obj,'prev_state')
-frame = getattr(control_obj,'frame')
+prop = {}
+prop['state']       = getattr( control_obj , 'state'      )
+prop['prev_state']  = getattr( control_obj , 'prev_state' )
+prop['frame']       = getattr( control_obj , 'frame'      )
+prop['slide_obj']   = getattr( control_obj , 'slide_obj'  )
 
-if play_sensor.isPositive():
+def update_attached_slide() :
+    position = control_obj.getPosition()
+    scaling = control_obj.scaling
+    orientation = control_obj.orientation
+    obj[ prop['slide_obj'] ].setPosition(position)
+    obj[ prop['slide_obj'] ].orientation = orientation
+    obj[ prop['slide_obj'] ].scaling = scaling
+    
+
+
+if sens['play'].isPositive():
     print "PLAY !!!!!!!"
-    setattr(control_obj,'prev_state',state)
+    print sens['play'].getBodies()[0]
+    #setattr(control_obj,'prev_state',prop['state'])
+    setattr(control_obj,'prev_state',False)
     setattr(control_obj,'state',True)
 
-if stop_sensor.isPositive():
+if sens['stop'].isPositive():
     print "STOP !!!!!!!"
-    setattr(control_obj,'prev_state',state)
+    setattr(control_obj,'prev_state',prop['state'])
     setattr(control_obj,'state',False)
 
-if check_anim_sensor.isPositive():
-    if prev_state != state :
-        if state == True :
-            action_act.set("LoopEnd",1,30,0)
-            GameLogic.addActiveActuator(action_act,True)
-            setattr(control_obj,'prev_state',state)
-            
-        elif state == False :
-            action_act.set("FromProp",1,1,0)
+if sens['check_anim'].isPositive():
+    if prop['prev_state'] != prop['state'] :
+        if prop['state'] == True :
             setattr(control_obj,'frame', 1)
-            action_act.setProperty('frame')
-            GameLogic.addActiveActuator(action_act, True)
-            setattr(control_obj,'prev_state',state)
+            GameLogic.addActiveActuator(act['anim_slide'],True)
+            setattr(control_obj,'prev_state',prop['state'])
+
+        elif prop['state'] == False :
+            setattr(control_obj,'frame', 30)
+            setattr(control_obj,'prev_state',prop['state'])
+    else :
+        if prop['state'] == True:
+            if prop['frame'] <= 30 :
+                setattr(control_obj,'frame',prop['frame']+1)
+                update_attached_slide()
+            else:
+                setattr(control_obj,'state',False)
+        else :
+            setattr(control_obj,'frame',1)
+            GameLogic.addActiveActuator(act['anim_slide'], False)
 
