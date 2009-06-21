@@ -2,7 +2,7 @@
 
 """ Registration info for Blender menus:
 Name: 'OpenDocumentPresentation (.odp)'
-Blender: 248
+Blender: 250
 Group: 'Import'
 Tip: 'OpenDocumentPresentation (*.odp)'
 """
@@ -16,12 +16,13 @@ This script import document from an Open Document Presentation
     create slides and text automagically
 """
 import Blender
-from Blender import Text3d, Mesh, Camera
+from Blender import Text3d, Mesh, Camera, Mathutils
+import bpy
 
 import codecs
 import sys
 import os
-
+import math
 
 from odf.opendocument import load,OpenDocumentPresentation
 from odf import text,presentation,draw,style
@@ -40,10 +41,11 @@ class BuildContext():
         self.doc['current_element_type'] = ""
         self.doc['current_line'] = 0
         
-        self.screen = { 'width' : 800, 'height' : 480 }
+        self.screen = { 'width' : 800, 'height' : 600 }
 
         self.font_list = {}
         self.load_fonts()
+
         self.blender = {}
         self.game = {}
         self.init_blender_file()
@@ -54,18 +56,35 @@ class BuildContext():
         self.blender['render'] = self.blender['scene'].getRenderingContext()
         self.blender['render'].enableGameFrameExpose()
 
-        self.blender['camera'] = Camera.New('persp', 'CamViewer')
-        self.blender['camera'].setLens(3.06)
-        self.blender['camera_object'] = self.blender['scene'].objects.new(self.blender['camera'])
-        self.blender['camera_object'].setLocation(6.7, -2.22 , 1)
-        self.blender['scene'].objects.camera = self.blender['camera_object']
+#        self.blender['camera'] = Camera.New('persp', 'CamViewer')
+#        self.blender['camera'].setLens(3.06)
+#        self.blender['camera_object'] = self.blender['scene'].objects.new(self.blender['camera'])
+#        self.blender['camera_object'].setLocation(6.7, -2.22 , 1)
+#        self.blender['scene'].objects.camera = self.blender['camera_object']
 
         self.blender['text'] = Text3d.New("tmp_text") #Create the Text3d object
         self.blender['text'].setExtrudeDepth(0)    #Give some relief 
         self.blender['text'].setDefaultResolution(1)
         self.blender['text_object'] = self.blender['scene'].objects.new(self.blender['text'])
         self.blender['scene'].objects.unlink(self.blender['text_object'])
+
+        ratio_x = float( self.screen['width'] / ( self.screen['width'] % self.screen['height'] ) )
+        ratio_y = float( self.screen['height'] / ( self.screen['width'] % self.screen['height'] ) )
+
+        coord = [ [ratio_x/2,0,ratio_y/2] , [ratio_x/2,0,-ratio_y/2] , [-ratio_x/2,0,-ratio_y/2] , [-ratio_x/2 , 0 , ratio_y/2] ]
+        faces = [ [ 3 , 2 , 1 , 0] ]
         
+        me = bpy.data.meshes.new('Page')
+
+        me.verts.extend(coord)
+        me.faces.extend(faces)
+
+        self.blender['page'] = self.blender['scene'].objects.new(me)
+        self.blender['scene'].objects.unlink(self.blender['page'])
+
+
+        self.blender['slides'] = Blender.Object.Get('Slides')
+
     # Font loading
     def strip_fontconfig_family(self,family):
         # remove alt name
@@ -120,18 +139,18 @@ class ODP_Text():
         i_element_type = build_context.doc['current_element_type']
         i_line = build_context.doc['current_line']
 
-        i_name = "p%d.f%d.%s_%d.l_%d" % ( i_page , i_frame , i_element_type , i_element , i_line )
+        i_name = "p%d%s_%d-%d" % ( i_page , i_element_type , i_element , i_line )
         i_text = self.text.data.encode('utf-8')
 
         
-        i_position_y = -1 * ( i_line - 1 )
+        i_position_z = -1 * ( i_line - 1 )
         i_position_x = 1 * ( self.level )
-        i_position_z = -5 * ( i_page - 1 )
+        i_position_y = 0.9 * ( i_page )
 
         b_text = build_context.blender['text']
         b_text_object = build_context.blender['text_object']
         b_scene = build_context.blender['scene']
-        print ("%r" % (self.text.data), i_name, b_text.getSize())
+        #print ("%r" % (self.text.data), i_name, b_text.getSize())
         b_text.setText(i_text)   #Set the text for Text3d object
         b_text.setFont(build_context.font_list['Liberation Sans']['Bold']['blender'] ) #Set the font to Text3d object
         b_mesh = Mesh.New(i_name)
@@ -139,6 +158,9 @@ class ODP_Text():
         b_mesh.getFromObject(b_text_object,0,0)
         
         b_object = b_scene.objects.new(b_mesh)
+
+        b_object.RotX = math.pi/2        
+        
         b_object.setLocation( i_position_x , i_position_y , i_position_z )
         b_object.makeDisplayList()
         
@@ -273,7 +295,7 @@ class ODP_Page() :
         i_walk = True
         i_element = x_page.firstChild
         while ( i_walk == True ) :
-        #    print i_element.tagName
+            #print i_element.tagName
             if ( i_element.tagName == 'draw:frame' ) :
                 self.frames.append( ODP_Frame(i_element) )
             if ( i_element.nextSibling != None ):
@@ -285,6 +307,25 @@ class ODP_Page() :
         build_context.doc['current_line'] = 0         
         build_context.doc['current_frame'] = 0
         build_context.doc['current_page'] += 1
+
+        b_scene = build_context.blender['scene']
+        i_page = build_context.doc['current_page']
+        i_name = "Page_%d" % ( build_context.doc['current_page'] )
+        
+        i_position_z = 0
+        i_position_x = 0
+        i_position_y = 1 * ( i_page )
+        
+        b_page = build_context.blender['page']
+        b_mesh = Mesh.New(i_name)
+        b_mesh.getFromObject(b_page,0,0)
+        b_object = b_scene.objects.new(b_mesh) 
+        b_object.setLocation( i_position_x , i_position_y , i_position_z )
+        b_object.makeDisplayList() 
+        
+        build_context.blender['slides'].makeParent([b_object],0,0)
+
+
         for i_frame in self.frames :
             i_frame.build(build_context)
 
@@ -307,6 +348,27 @@ class ODP_Presentation() :
         self.footer = x_presentation.getElementsByType( presentation.FooterDecl)[0].firstChild
         self.time = x_presentation.getElementsByType( presentation.DateTimeDecl)[0].getAttribute( 'source' )
         self.addPagesFrom(x_presentation)
+        doc = x_presentation.parentNode.parentNode
+        #print x_presentation.parentNode.parentNode.qname[1]
+        self.layout = None
+        self.page_width = 0
+        self.page_height = 0
+        for i in doc.getElementsByType(style.MasterPage):
+            print i.qname[1]
+            print i.attributes
+            self.layout = i.attributes['style:page-layout-name']
+
+        if self.layout != None:
+            for i in doc.getElementsByType(style.PageLayout):
+                #print i.qname[1]
+                if ( i.attributes['style:name'] == self.layout) :
+                    print i.qname[1]
+                    print i.attributes
+                    for j in i.getElementsByType(style.PageLayoutProperties):
+                        print j.qname[1]
+                        print j.attributes
+                        self.page_width = j.attributes['fo:page-width']
+                        self.page_height = j.attributes['fo:page-height']
         
     def addPagesFrom( self, x_presentation ) :
         
@@ -332,10 +394,10 @@ class ODP_Presentation() :
                 i_walk = False
                 
     def build( self , build_context) :
-        
+        build_context.doc['page_size'] = { 'width' : self.page_width , 'height':self.page_height }
         for i_page in self.pages :
             i_page.build(build_context)
-        print(build_context)
+    #    print(build_context)
 
 
 
@@ -344,6 +406,8 @@ class ODP_Presentation() :
         str += "|PRESENTATION\n"
         str += "| Footer is %s\n" % (self.footer)
         str += "| Time is %s\n" % (self.time)
+        str += "| Page Width %s\n" % (self.page_width)
+        str += "| Page Height %s\n" % (self.page_height)
         str += "=====\n"
         for p in self.pages:
             str += "%s\n" % p
@@ -356,6 +420,7 @@ if __name__ == '__main__':
 
     odp_file = ''
 
+    print Blender.mode
     if Blender.mode == 'background' or Blender.mode == 'interactive':
 #        print sys.argv
         real_argv_index = sys.argv.index('--') + 1
@@ -393,15 +458,26 @@ if __name__ == '__main__':
     d = doc.presentation
     build_context = BuildContext()
     op = ODP_Presentation(d)
-    #print (unicode(op))
+#    print (unicode(op))
     op.build(build_context)
 
-    for i in doc.styles.getElementsByType(style.Style):
-        print i.qname[1]
-        print i.attributes
+    #for i in doc.styles.getElementsByType(style.Style):
+    #print doc.styles
+
+#    for i in doc.getElementsByType(style.MasterPage):
+#        print i.qname[1]
+#        print i.attributes
+#    for i in doc.getElementsByType(style.PageLayout):
+#        print i.qname[1]
+#        print i.attributes
+#        for j in i.getElementsByType(style.PageLayoutProperties):
+#            print j.qname[1]
+#            print j.attributes
+    
     blender_file = Blender.sys.makename(odp_file,'.blend')
     Blender.Save(blender_file,1)
     print "Blender File created at '%s'" % (blender_file)
+
 #Blender.Quit()
 #for i in doc._extra:
 #    print i.mediatype , i.filename , i.content
