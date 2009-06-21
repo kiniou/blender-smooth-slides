@@ -38,10 +38,13 @@ def update_attached_slide() :
 
 if sens['play'].isPositive():
     print "PLAY !!!!!!!"
-    print sens['play'].getBodies()[0]
-    #setattr(control_obj,'prev_state',prop['state'])
-    setattr(control_obj,'prev_state',False)
-    setattr(control_obj,'state',True)
+    if (prop['state'] == False) :
+        setattr(control_obj,'slide_obj',sens['play'].getBodies()[0])
+        #setattr(control_obj,'prev_state',prop['state'])
+        setattr(control_obj,'prev_state',False)
+        setattr(control_obj,'state',True)
+    else :
+        setattr(control_obj,'state',False)
 
 if sens['stop'].isPositive():
     print "STOP !!!!!!!"
@@ -60,7 +63,7 @@ if sens['check_anim'].isPositive():
             setattr(control_obj,'prev_state',prop['state'])
     else :
         if prop['state'] == True:
-            if prop['frame'] <= 30 :
+            if prop['frame'] < 30 :
                 setattr(control_obj,'frame',prop['frame']+1)
                 update_attached_slide()
             else:
