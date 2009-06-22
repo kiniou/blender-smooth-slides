@@ -16,7 +16,7 @@ This script import document from an Open Document Presentation
     create slides and text automagically
 """
 import Blender
-from Blender import Text3d, Mesh, Camera, Mathutils
+from Blender import Text3d, Mesh, Camera, Mathutils,sys as bsys , Material
 import bpy
 
 import codecs
@@ -25,7 +25,7 @@ import os
 import math
 
 from odf.opendocument import load,OpenDocumentPresentation
-from odf import text,presentation,draw,style
+from odf import text,presentation,draw,style,office
 
 
 class BuildContext():
@@ -40,6 +40,7 @@ class BuildContext():
         self.doc['current_element'] = 0
         self.doc['current_element_type'] = ""
         self.doc['current_line'] = 0
+        self.doc['current_text'] = 0
         
         self.screen = { 'width' : 800, 'height' : 600 }
 
@@ -112,15 +113,24 @@ class BuildContext():
             for style , file in styles.iteritems():
                 blender_font = Text3d.Font.Load(file['path'])
                 file['blender'] = blender_font
+                #print file['blender']
 
 class ODP_Text():
     
-    def __init__( self, x_text ) :
+    def __init__( self, x_text ,doc , styles , parent) :
 
         self.attributes = x_text.attributes
         self.id = x_text.getAttribute('id')
         self.style_name = x_text.getAttribute( 'stylename' )
+        if self.style_name == None:
+            self.style_name = parent.style_name
+            print "Text Style = %s" % self.style_name
+        else:
+            print "Text Style = %s , Parent Style = %s" % (self.style_name , parent.style_name)
+
+        #FIXME : the text may be contained in another text element :/ ... Fu#!@&ing XML
         self.text = x_text.firstChild
+
         self.cond_style_name = x_text.getAttribute( 'condstylename' )
         self.class_names = x_text.getAttribute( 'classnames' )
         self.level = 1
@@ -131,15 +141,72 @@ class ODP_Text():
                 self.level += 1
             parent = parent.parentNode
 
+
+#        doc.getStyleByName(self.style_name).attributes
+        
+        s = styles['styles'][self.style_name]
+        if s.attributes.has_key('style:parent-style-name') :
+            s = styles['styles'][s.attributes['style:parent-style-name']]
+
+
+        para_prop = None
+        text_prop = None
+#        print para_prop.attributes
+        #text_prop = s.getElementsByType(style.TextProperties)
+        i_walk = True
+        i_element = s.firstChild
+        while i_walk == True:
+            #print dir(i_element)
+            if i_element.tagName == 'style:text-properties':
+                text_prop = i_element
+            if i_element.tagName == 'style:paragraph-properties':
+                para_prop = i_element
+            
+            if (i_element.nextSibling != None) :
+                i_element = i_element.nextSibling
+            else :
+                i_walk = False
+
+        self.font = {}
+        if para_prop != None : 
+            print para_prop.attributes
+            text_align = para_prop.attributes['fo:text-align']
+            if text_align == 'start': self.font['text-align'] = Text3d.LEFT
+            elif text_align == 'center': self.font['text-align'] = Text3d.MIDDLE
+            elif text_align == 'end': self.font['text-align'] = Text3d.RIGHT
+            else: self.font['text-align'] = Text3d.LEFT
+            
+            
+        else:
+            print "No paragraph style"
+            self.font['text-align'] = Text3d.LEFT
+
+        if text_prop != None : 
+            for k,v in text_prop.attributes.items():
+                print k , v
+            self.font['font-family']= text_prop.attributes['fo:font-family']
+            self.font['font-style'] = text_prop.attributes['fo:font-style']
+            self.font['font-size'] = text_prop.attributes['fo:font-size']
+            self.font['font-weight'] = text_prop.attributes['fo:font-weight']
+            self.font['font-underline'] = text_prop.attributes['style:text-underline-style']
+            
+        else: 
+            print "No text style"
+        print ""
+#        styles['styles'][self.style_name].attributes
+
     def build( self , build_context) :
         build_context.doc['current_line'] += 1
+        build_context.doc['current_text'] += 1
         i_page = build_context.doc['current_page']
         i_frame = build_context.doc['current_frame']
         i_element = build_context.doc['current_element']
         i_element_type = build_context.doc['current_element_type']
         i_line = build_context.doc['current_line']
+        i_text = build_context.doc['current_text']
 
-        i_name = "p%d%s_%d-%d" % ( i_page , i_element_type , i_element , i_line )
+        i_name = "Text_%d" % ( i_text )
+        #print self.text.data.encode('utf-8')
         i_text = self.text.data.encode('utf-8')
 
         
@@ -147,6 +214,10 @@ class ODP_Text():
         i_position_x = 1 * ( self.level )
         i_position_y = 0.9 * ( i_page )
 
+        b_material = Material.New(i_name)
+        b_material.rgbCol = [0.0 , 0.0 , 0.0]
+        b_material.setMode('Shadeless')
+ 
         b_text = build_context.blender['text']
         b_text_object = build_context.blender['text_object']
         b_scene = build_context.blender['scene']
@@ -156,14 +227,18 @@ class ODP_Text():
         b_mesh = Mesh.New(i_name)
         
         b_mesh.getFromObject(b_text_object,0,0)
-        
+        b_mesh.materials += [b_material]       
+#        b_object.setMaterials([b_material])
+
         b_object = b_scene.objects.new(b_mesh)
 
         b_object.RotX = math.pi/2        
         
         b_object.setLocation( i_position_x , i_position_y , i_position_z )
+
         b_object.makeDisplayList()
-        
+
+        build_context.blender['current_page_obj'].makeParent([b_object],0,0)
 
     def __str__( self ) :
         str = ""
@@ -181,16 +256,17 @@ class ODP_Text():
         return str
 
 class ODP_TextBox() :
-    def __init__( self , x_textbox):
+    def __init__( self , x_textbox , doc , styles , parent):
         self.texts = []
+        self.style_name = parent.style_name 
 
-        self.addTextsFrom( x_textbox )
+        self.addTextsFrom( x_textbox , doc , styles)
 
-    def addTextsFrom( self, x_textbox ) :
+    def addTextsFrom( self, x_textbox , doc , styles) :
 
         i_texts = x_textbox.getElementsByType(text.P)
         for i_text in i_texts:
-            self.texts.append( ODP_Text(i_text) )
+            self.texts.append( ODP_Text(i_text , doc , styles , self) )
 
 #        i_walk = True
 #        i_element = x_textbox.firstChild
@@ -221,8 +297,13 @@ class ODP_TextBox() :
 
 class ODP_Frame() :
 
-    def __init__( self, x_frame ) :
-        self.style_name = x_frame.getAttribute( 'stylename') 
+    def __init__( self, x_frame , doc , styles) :
+#        self.style_name = x_frame.getAttribute( 'stylename') 
+#        print x_frame.attributes
+
+        #FIXME : odfpy can't find presentation:style-name with getAttribute
+        if x_frame.attributes.has_key('presentation:style-name'): self.style_name = x_frame.attributes['presentation:style-name']
+        else : self.style_name = x_frame.attributes['draw:style-name']
         self.class_name = x_frame.getAttribute( 'class' )
         self.width = x_frame.getAttribute( 'width' )
         self.height = x_frame.getAttribute( 'height' )
@@ -233,16 +314,20 @@ class ODP_Frame() :
         
         self.attributes = x_frame.attributes
 
-        self.addElementsFrom(x_frame)
+        st_attr = styles['styles'][self.style_name].attributes
 
-    def addElementsFrom( self , x_frame) :
+        #if st_attr.has_key('style:parent-style-name') : str_attr
+
+        self.addElementsFrom(x_frame , doc , styles)
+
+    def addElementsFrom( self , x_frame , doc , styles) :
         
         i_walk = True
         i_element = x_frame.firstChild
         while ( i_walk == True ) :
             
             if ( i_element.tagName == 'draw:text-box' ) :
-                self.frame_elements.append( ODP_TextBox( i_element ) )
+                self.frame_elements.append( ODP_TextBox( i_element , doc , styles , self) )
 
 #            if ( i_element.tagName == 'draw:image' ) :
 #                self.elements.append( ODP_Image( i_element ) )
@@ -270,7 +355,7 @@ class ODP_Frame() :
         str+="         | y        : %s\n" % (self.y)
         str+="         | zindex   : %s\n" % (self.zindex)
 # For debugging purpose only
-        #str+="         | attributes: %s\n" % (self.attributes)
+        str+="         | attributes: %s\n" % (self.attributes)
         str+="         =====\n"
 
         for i in self.frame_elements :
@@ -280,24 +365,33 @@ class ODP_Frame() :
 
 class ODP_Page() :
 
-    def __init__( self, x_page ) :
+    def __init__( self, x_page , doc , styles) :
         
         self.name = ""
         self.frames = []
         self.number = 0
 
         self.name = x_page.getAttribute('name')
+        self.masterpage = x_page.attributes['draw:master-page-name']
         
-        self.addFramesFrom(x_page)
+        if (len(styles['masterpages']) > 0) :
+            self.layout = styles['masterpages'][self.masterpage].attributes['style:page-layout-name']
 
-    def addFramesFrom( self , x_page) :
+        if self.layout != None:
+            prop = styles['pagelayouts'][self.layout].getElementsByType(style.PageLayoutProperties)[0]
+            self.page_width = prop.attributes['fo:page-width']
+            self.page_height = prop.attributes['fo:page-height']
+
+        self.addFramesFrom(x_page , doc , styles)
+
+    def addFramesFrom( self , x_page , doc , styles) :
 
         i_walk = True
         i_element = x_page.firstChild
         while ( i_walk == True ) :
             #print i_element.tagName
             if ( i_element.tagName == 'draw:frame' ) :
-                self.frames.append( ODP_Frame(i_element) )
+                self.frames.append( ODP_Frame(i_element , doc , styles) )
             if ( i_element.nextSibling != None ):
                 i_element = i_element.nextSibling
             else :
@@ -307,6 +401,7 @@ class ODP_Page() :
         build_context.doc['current_line'] = 0         
         build_context.doc['current_frame'] = 0
         build_context.doc['current_page'] += 1
+        build_context.doc['page_size'] = { 'width' : self.page_width , 'height':self.page_height }
 
         b_scene = build_context.blender['scene']
         i_page = build_context.doc['current_page']
@@ -324,6 +419,7 @@ class ODP_Page() :
         b_object.makeDisplayList() 
         
         build_context.blender['slides'].makeParent([b_object],0,0)
+        build_context.blender['current_page_obj'] = b_object
 
 
         for i_frame in self.frames :
@@ -340,37 +436,46 @@ class ODP_Page() :
 
 class ODP_Presentation() :
     
-    def __init__( self, x_presentation ) :
+    def __init__( self, x_presentation, doc , styles) :
         self.footer = ""
         self.time = ""
         self.pages = []
         
         self.footer = x_presentation.getElementsByType( presentation.FooterDecl)[0].firstChild
         self.time = x_presentation.getElementsByType( presentation.DateTimeDecl)[0].getAttribute( 'source' )
-        self.addPagesFrom(x_presentation)
-        doc = x_presentation.parentNode.parentNode
-        #print x_presentation.parentNode.parentNode.qname[1]
+
         self.layout = None
         self.page_width = 0
         self.page_height = 0
-        for i in doc.getElementsByType(style.MasterPage):
-            print i.qname[1]
-            print i.attributes
-            self.layout = i.attributes['style:page-layout-name']
-
-        if self.layout != None:
-            for i in doc.getElementsByType(style.PageLayout):
-                #print i.qname[1]
-                if ( i.attributes['style:name'] == self.layout) :
-                    print i.qname[1]
-                    print i.attributes
-                    for j in i.getElementsByType(style.PageLayoutProperties):
-                        print j.qname[1]
-                        print j.attributes
-                        self.page_width = j.attributes['fo:page-width']
-                        self.page_height = j.attributes['fo:page-height']
         
-    def addPagesFrom( self, x_presentation ) :
+        
+#        for i in doc.getElementsByType(style.MasterPage):
+#            print i.qname[1]
+#            print i.attributes
+#            self.layout = i.attributes['style:page-layout-name']
+
+#        if (len(styles['masterpages']) > 0) :
+#            styles['masterpages']. 
+#            self.layout = styles['masterpages'][0].attributes['style:page-layout-name']
+#
+#        if self.layout != None:
+#            prop = styles['pagelayouts'][self.layout].getElementsByType(style.PageLayoutProperties)
+#            self.page_width = j.attributes['fo:page-width']
+#            self.page_height = j.attributes['fo:page-height']
+#            for i in doc.getElementsByType(style.PageLayout):
+                #print i.qname[1]
+#                if ( i.attributes['style:name'] == self.layout) :
+#                    print i.qname[1]
+#                    print i.attributes
+#                    for j in i.getElementsByType(style.PageLayoutProperties):
+#                        print j.qname[1]
+#                        print j.attributes
+#                        self.page_width = j.attributes['fo:page-width']
+#                        self.page_height = j.attributes['fo:page-height']
+        
+        self.addPagesFrom(x_presentation , doc , styles)
+
+    def addPagesFrom( self, x_presentation , doc, styles) :
         
         i_walk = True
         i_element = x_presentation.firstChild
@@ -385,7 +490,7 @@ class ODP_Presentation() :
             
             if ( i_element.tagName == 'draw:page') :
                 i_page_number += 1
-                self.pages.append( ODP_Page( i_element) )
+                self.pages.append( ODP_Page( i_element , doc , styles) )
                 self.pages[-1].number = i_page_number
 
             if (i_element.nextSibling != None) :
@@ -394,7 +499,6 @@ class ODP_Presentation() :
                 i_walk = False
                 
     def build( self , build_context) :
-        build_context.doc['page_size'] = { 'width' : self.page_width , 'height':self.page_height }
         for i_page in self.pages :
             i_page.build(build_context)
     #    print(build_context)
@@ -419,13 +523,15 @@ if __name__ == '__main__':
     # TODO: Verify if script is installed in the plugins Blender directory
 
     odp_file = ''
+#    template_file = ''
+    
 
-    print Blender.mode
+#    print Blender.mode
     if Blender.mode == 'background' or Blender.mode == 'interactive':
 #        print sys.argv
         real_argv_index = sys.argv.index('--') + 1
         real_argv=sys.argv[real_argv_index:]
-        print real_argv
+#        print real_argv
 
         from optparse import OptionParser
         usage = "usage: blender -b -P %prog -- [options] filename"
@@ -435,34 +541,56 @@ if __name__ == '__main__':
         parser.add_option("-q", "--quiet",
                           action="store_false", dest="verbose", default=True,
                           help="don't print status messages to stdout")
-        parser.add_option("-t", "--template",
-                          action="store_false", dest="template", default=True,
-                          help="don't print status messages to stdout")
+#        parser.add_option("-t", "--template",
+#                          dest="template", default="template_coverflow",
+#                          help="specifies a Blender template [default = %default]")
 
         (options, args) = parser.parse_args(real_argv)
         print options , args
 
+#        template_file = Blender.sys.expandpath("//blender_templates/%s.blend" % (options.template))
+
         if len(args) == 0:
+            parser.print_help()
             parser.error("You must provide at least a filename")
         if len(args) > 1:
+            parser.print_help()
             parser.error("You must provide JUST ONE filename")
         if Blender.sys.exists(args[0]) != 1:
+            parser.print_help()
             parser.error("File '%s' does not exist or is not a file" % (args[0]))
-        
-        odp_file = args[0]
+#        if Blender.sys.exists(template_file) != 1:
+#            parser.print_help()
+#            parser.error("Template '%s' does not exist or is not a file" % (template_file) )
+            
+    odp_file = args[0]
+#    Blender.Load(template_file)
 
+    print odp_file    
+#    print template_file
     doc = load(odp_file)
-    print ("DEBUG opendocument")
-    print Blender.mode
-        
-    d = doc.presentation
+    print ("DEBUG opendocument import with Blender in %s mode" % (Blender.mode))
+
+    styles = {}
+    styles['masterpages'] = {}
+    styles['pagelayouts'] = {}
+    styles['styles'] = {}
+    
+    for i in doc.getElementsByType(style.Style) :
+        styles['styles'][i.attributes['style:name']] = i
+
+    for i in doc.getElementsByType(style.MasterPage) :
+        styles['masterpages'][i.attributes['style:name']] = i
+    
+    for i in doc.getElementsByType(style.PageLayout) :
+        styles['pagelayouts'][i.attributes['style:name']] = i
+
+    
+
     build_context = BuildContext()
-    op = ODP_Presentation(d)
+    op = ODP_Presentation(doc.presentation , doc , styles)
 #    print (unicode(op))
     op.build(build_context)
-
-    #for i in doc.styles.getElementsByType(style.Style):
-    #print doc.styles
 
 #    for i in doc.getElementsByType(style.MasterPage):
 #        print i.qname[1]
