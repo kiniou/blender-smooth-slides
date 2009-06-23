@@ -68,11 +68,11 @@ class BuildContext():
         self.blender['text'].setDefaultResolution(1)
         self.blender['text_object'] = self.blender['scene'].objects.new(self.blender['text'])
         self.blender['scene'].objects.unlink(self.blender['text_object'])
+        print dir(self.blender['text'])
+        self.ratio_x = float( self.screen['width'] / ( self.screen['width'] % self.screen['height'] ) )
+        self.ratio_y = float( self.screen['height'] / ( self.screen['width'] % self.screen['height'] ) )
 
-        ratio_x = float( self.screen['width'] / ( self.screen['width'] % self.screen['height'] ) )
-        ratio_y = float( self.screen['height'] / ( self.screen['width'] % self.screen['height'] ) )
-
-        coord = [ [ratio_x/2,0,ratio_y/2] , [ratio_x/2,0,-ratio_y/2] , [-ratio_x/2,0,-ratio_y/2] , [-ratio_x/2 , 0 , ratio_y/2] ]
+        coord = [ [self.ratio_x/2,0,self.ratio_y/2] , [self.ratio_x/2,0,-self.ratio_y/2] , [-self.ratio_x/2,0,-self.ratio_y/2] , [-self.ratio_x/2 , 0 , self.ratio_y/2] ]
         faces = [ [ 3 , 2 , 1 , 0] ]
         
         me = bpy.data.meshes.new('Page')
@@ -117,16 +117,16 @@ class BuildContext():
 
 class ODP_Text():
     
-    def __init__( self, x_text ,doc , styles , parent) :
+    def __init__( self, x_text ,doc , styles , x_parent) :
 
         self.attributes = x_text.attributes
         self.id = x_text.getAttribute('id')
         self.style_name = x_text.getAttribute( 'stylename' )
         if self.style_name == None:
-            self.style_name = parent.style_name
-            print "Text Style = %s" % self.style_name
-        else:
-            print "Text Style = %s , Parent Style = %s" % (self.style_name , parent.style_name)
+            self.style_name = x_parent.style_name
+        #    print "Text Style = %s" % self.style_name
+        #else:
+        #    print "Text Style = %s , Parent Style = %s" % (self.style_name , x_parent.style_name)
 
         #FIXME : the text may be contained in another text element :/ ... Fu#!@&ing XML
         self.text = x_text.firstChild
@@ -148,28 +148,32 @@ class ODP_Text():
         if s.attributes.has_key('style:parent-style-name') :
             s = styles['styles'][s.attributes['style:parent-style-name']]
 
+        s_parent = styles['styles'][x_parent.style_name]
+        if s_parent.attributes.has_key('style:parent-style-name') :
+            s_parent = styles['styles'][s_parent.attributes['style:parent-style-name']]
 
         para_prop = None
         text_prop = None
 #        print para_prop.attributes
         #text_prop = s.getElementsByType(style.TextProperties)
-        i_walk = True
-        i_element = s.firstChild
-        while i_walk == True:
-            #print dir(i_element)
-            if i_element.tagName == 'style:text-properties':
-                text_prop = i_element
-            if i_element.tagName == 'style:paragraph-properties':
-                para_prop = i_element
-            
-            if (i_element.nextSibling != None) :
-                i_element = i_element.nextSibling
-            else :
-                i_walk = False
+        for i_style in [s,s_parent]:
+            i_walk = True
+            i_element = i_style.firstChild
+            while i_walk == True:
+                #print dir(i_element)
+                if i_element.tagName == 'style:text-properties':
+                    text_prop = i_element
+                if i_element.tagName == 'style:paragraph-properties':
+                    para_prop = i_element
+                
+                if (i_element.nextSibling != None) :
+                    i_element = i_element.nextSibling
+                else :
+                    i_walk = False
 
         self.font = {}
         if para_prop != None : 
-            print para_prop.attributes
+            #print para_prop.attributes
             text_align = para_prop.attributes['fo:text-align']
             if text_align == 'start': self.font['text-align'] = Text3d.LEFT
             elif text_align == 'center': self.font['text-align'] = Text3d.MIDDLE
@@ -178,22 +182,50 @@ class ODP_Text():
             
             
         else:
-            print "No paragraph style"
+            #print "No paragraph style"
             self.font['text-align'] = Text3d.LEFT
 
         if text_prop != None : 
-            for k,v in text_prop.attributes.items():
-                print k , v
-            self.font['font-family']= text_prop.attributes['fo:font-family']
-            self.font['font-style'] = text_prop.attributes['fo:font-style']
-            self.font['font-size'] = text_prop.attributes['fo:font-size']
-            self.font['font-weight'] = text_prop.attributes['fo:font-weight']
-            self.font['font-underline'] = text_prop.attributes['style:text-underline-style']
-            
+            i_font_family = text_prop.attributes['fo:font-family']
+            i_font_style = text_prop.attributes['fo:font-style']
+            i_font_size = text_prop.attributes['fo:font-size']
+            i_font_underline = text_prop.attributes['style:text-underline-style']
+            i_font_weight = text_prop.attributes['fo:font-weight']
+
         else: 
-            print "No text style"
-        print ""
-#        styles['styles'][self.style_name].attributes
+            #print "No text style"
+            i_font_family = 'Liberation Sans'
+            i_font_style = 'normal'
+            i_font_size = '12pt'
+            i_font_underline = 'none'
+            i_font_weight = 'normal'
+
+        self.font['font-family'] = i_font_family.strip("'")
+
+        if i_font_style == 'italic' :
+            self.font['font-style'] = 'Italic'
+        elif i_font_style == 'normal' :
+            self.font['font-style'] = 'Regular'
+
+
+        self.font['font-size'] = i_font_size.replace("pt","")
+
+        if i_font_underline != 'none':
+            self.font['font-underline'] = True
+        
+        if i_font_weight != 'normal' :
+            self.font['font-weight'] = 'Bold'
+        else: 
+            self.font['font-weight'] = 'Regular'
+
+        i_real_style = [self.font['font-weight'] , self.font['font-style']]
+        if (i_real_style[0] == i_real_style[1] ) : self.font['real-style'] = i_real_style[0]
+        elif (i_real_style[0] == 'Regular') : self.font['real-style'] = i_real_style[1]
+        elif (i_real_style[1] == 'Regular') : self.font['real-style'] = i_real_style[0]
+        else :self.font['real-style'] = " ".join(i_real_style)
+
+        #print self.font
+        #print ""
 
     def build( self , build_context) :
         build_context.doc['current_line'] += 1
@@ -209,13 +241,18 @@ class ODP_Text():
         #print self.text.data.encode('utf-8')
         i_text = self.text.data.encode('utf-8')
 
+        i_ratio_x = build_context.ratio_x
+        i_ratio_y = build_context.ratio_y
+        if self.font['text-align'] == Text3d.LEFT : i_start_x = -i_ratio_x/2.0
+        elif self.font['text-align'] == Text3d.RIGHT : i_start_x = i_ratio_x/2.0
+        else : i_start_x = 0
         
-        i_position_z = -1 * ( i_line - 1 )
-        i_position_x = 1 * ( self.level )
-        i_position_y = 0.9 * ( i_page )
+        i_position_z = i_ratio_y/2.0 - 0.2 * ( i_line )
+        i_position_x = i_start_x + 1 * ( self.level - 1 )
+        i_position_y = -0.01 #0.95 * ( i_page )
 
-        b_material = Material.New(i_name)
-        b_material.rgbCol = [0.0 , 0.0 , 0.0]
+        b_material = Material.New("Mat_%s" % i_name)
+        b_material.rgbCol = [1.0 , 0.0 , 0.0]
         b_material.setMode('Shadeless')
  
         b_text = build_context.blender['text']
@@ -223,7 +260,9 @@ class ODP_Text():
         b_scene = build_context.blender['scene']
         #print ("%r" % (self.text.data), i_name, b_text.getSize())
         b_text.setText(i_text)   #Set the text for Text3d object
-        b_text.setFont(build_context.font_list['Liberation Sans']['Bold']['blender'] ) #Set the font to Text3d object
+        b_text.setAlignment(self.font['text-align'])
+        b_text.setSize(0.2)
+        b_text.setFont(build_context.font_list[self.font['font-family']][self.font['real-style']]['blender'] ) #Set the font to Text3d object
         b_mesh = Mesh.New(i_name)
         
         b_mesh.getFromObject(b_text_object,0,0)
@@ -409,7 +448,7 @@ class ODP_Page() :
         
         i_position_z = 0
         i_position_x = 0
-        i_position_y = 1 * ( i_page )
+        i_position_y = 0#1 * ( i_page )
         
         b_page = build_context.blender['page']
         b_mesh = Mesh.New(i_name)
@@ -589,7 +628,7 @@ if __name__ == '__main__':
 
     build_context = BuildContext()
     op = ODP_Presentation(doc.presentation , doc , styles)
-#    print (unicode(op))
+    print (unicode(op))
     op.build(build_context)
 
 #    for i in doc.getElementsByType(style.MasterPage):
