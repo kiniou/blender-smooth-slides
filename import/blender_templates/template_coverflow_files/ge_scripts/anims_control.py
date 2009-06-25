@@ -89,7 +89,7 @@ def update_slides_pos():
             #slide.position = [ diff*4 + dx , -( 1 - fabs(diff) ) * 6 ,0 ]
             faceup_len = ( 1 - fabs(dx) ) * -1.8 * cm
 #            if (dx < 1.0 and dx > -1.0):
-            slide.position = [ (i * 0.1* cm ) + (0.9 * cm * dx) , faceup_len ,0 ]
+            slide.position = [ (i * 0.1* cm ) + (1.75 * cm * dx) , faceup_len ,0 ]
 #            else :
                 
 #                slide.position = [ (i*(0.5*cm)) + (1 * cm * dx) , faceup_len ,0 ]

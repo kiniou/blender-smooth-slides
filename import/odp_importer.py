@@ -16,8 +16,10 @@ This script import document from an Open Document Presentation
     create slides and text automagically
 """
 import Blender
-from Blender import Text3d, Mesh, Camera, Mathutils,sys as bsys , Material
+from Blender import Text3d, Mesh, Camera, Mathutils,sys as bsys , Material , Texture , Image as BImage
 import bpy
+
+import PIL
 
 import codecs
 import sys
@@ -25,8 +27,10 @@ import os
 import math
 import copy
 import urllib
-
+import zipfile
 import ImageFont,ImageFile,ImageDraw,Image
+
+import StringIO
 
 from odf.opendocument import load,OpenDocumentPresentation
 from odf import text,presentation,draw,style,office
@@ -46,6 +50,17 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 
 global_fonts = {}
+
+def HTMLColorToRGB(colorstring):
+    """ convert #RRGGBB to an (R, G, B) tuple """
+    colorstring = colorstring.strip()
+    if colorstring[0] == '#': colorstring = colorstring[1:]
+    if len(colorstring) != 6:
+        raise ValueError, "input #%s is not in #RRGGBB format" % colorstring
+    r, g, b = colorstring[:2], colorstring[2:4], colorstring[4:]
+    r, g, b = [int(n, 16) for n in (r, g, b)]
+    return (r/255.0, g/255.0, b/255.0)
+
 
 class BuildContext():
     
@@ -92,8 +107,43 @@ class BuildContext():
         self.blender['slides'] = Blender.Object.Get('Slides')
 
 
-    def create_blender_page(self, width , height , name):
+    def create_blender_page(self, width , height , name , img_data , img_name):
         
+
+        b_img = None
+        img_list = BImage.Get()
+        for i in img_list:
+            if i.name == img_name:
+                b_img = i
+                break
+        if  b_img == None:
+            img_io = StringIO.StringIO(img_data)
+            img = PIL.Image.open(img_io)
+
+            img_bbox=img.getbbox()
+            img.save('tmp.png')
+        #for k,v in Image.new.func_globals.items() : print k,v
+#            b_img = BImage.New( img_name , img_bbox[2], img_bbox[3], 32)
+#            b_img.source = BImage.Sources.STILL
+#            
+#            for x in range(0,img_bbox[2]):
+#                for y in range(0,img_bbox[3]):
+#                    p = img.getpixel((x,y))
+#                    b_img.setPixelI(x,y,(p[0],p[1],p[2],255))
+##                    print b_img.getPixelI(x,y)
+            b_img = BImage.Load('/home/kiniou/Projects/blender-scripts/import/tmp.png')
+            b_texture = Texture.New(img_name)
+            b_texture.setImage(b_img)
+            b_material = Material.New(img_name)
+            b_material.setTexture(0,b_texture,Texture.TexCo.UV,Texture.MapTo.COL)
+            print b_material.name
+        else:
+            b_material = Material.Get(img_name)
+#        b_material.
+
+#        img.save('test.png')
+
+
 #        self.ratio_x = float( self.screen['width'] / ( self.screen['width'] % self.screen['height'] ) )
 #        self.ratio_y = float( self.screen['height'] / ( self.screen['width'] % self.screen['height'] ) )
         self.ratio_x = float( width )
@@ -102,24 +152,37 @@ class BuildContext():
         coord = [ [self.ratio_x/2,0,self.ratio_y/2] , [self.ratio_x/2,0,-self.ratio_y/2] , [-self.ratio_x/2,0,-self.ratio_y/2] , [-self.ratio_x/2 , 0 , self.ratio_y/2] ]
         faces = [ [ 3 , 2 , 1 , 0] ]
         
+
         me = bpy.data.meshes.new(name)
 
         me.verts.extend(coord)
         me.faces.extend(faces)
+#        me.addUVLayer('UVTex')
+        uv = ( Mathutils.Vector([1,0]) , Mathutils.Vector([1,1]) , Mathutils.Vector([0,1]) , Mathutils.Vector([0,0]) )
+        for i in me.faces:
+            i.uv = uv
+        #me.materials += [b_material]
+        print 'tot1'
+        me.materials = [b_material]
+        print 'tot2'
 
         self.blender['page'] = self.blender['scene'].objects.new(me)
         #self.blender['scene'].objects.unlink(self.blender['page'])
 
 
-    def create_blender_text(self,name):
+    def create_blender_text(self,name, color):
 
+        b_material = Material.New("Mat_%s" % name)
+        b_material.rgbCol = [color[0] , color[1] , color[2] ]
+        b_material.setMode('Shadeless')
         self.blender['text'] = Text3d.New("Text3d_%s" % name) #Create the Text3d object
         self.blender['text'].setExtrudeDepth(0)    #Give some relief 
         self.blender['text'].setDefaultResolution(1)
         #self.blender['text'].setSpacing(0.92)
         
         self.blender['text_object'] = self.blender['scene'].objects.new(self.blender['text'])
-        #self.blender['scene'].objects.unlink(self.blender['text_object'])
+        self.blender['text_material'] = b_material
+        self.blender['scene'].objects.unlink(self.blender['text_object'])
         
 
     # Font loading
@@ -216,8 +279,8 @@ class ODP_Text():
 #            print s_walk.attributes['style:name']
             s.append(s_walk)
 
-        for i in s:
-            print "DEBUG 1 : " , i.attributes['style:name']
+#        for i in s:
+#            print "DEBUG 1 : " , i.attributes['style:name']
 
 
 #        s_parent = styles['styles'][x_parent.style_name]
@@ -237,22 +300,32 @@ class ODP_Text():
                     if text_prop == None :
                         #text_prop = copy.deepcopy(i_element)
                         text_prop = i_element
-                        print "DEBUG 2 : " , i_style.attributes['style:name'] , text_prop.attributes
+#                        print "DEBUG 2 : " , i_style.attributes['style:name'] , text_prop.attributes
                     else :
                         #i_tmp_element = copy.deepcopy(i_element)
                         for key,value in i_element.attributes.items():
                             if text_prop.attributes.has_key(key):
                                 i_element.attributes[key] = text_prop.attributes[key]
                         text_prop = i_element
-                        print "DEBUG 2 : " , i_style.attributes['style:name'] , text_prop.attributes
+#                        print "DEBUG 2 : " , i_style.attributes['style:name'] , text_prop.attributes
                 if i_element.tagName == 'style:paragraph-properties':
-                    para_prop = i_element
+                    if para_prop == None :
+                        para_prop = i_element
                 
+                    else :
+                        #i_tmp_element = copy.deepcopy(i_element)
+                        for key,value in i_element.attributes.items():
+                            if para_prop.attributes.has_key(key):
+                                i_element.attributes[key] = para_prop.attributes[key]
+                        para_prop = i_element
+#                        print "DEBUG 2 : " , i_style.attributes['style:name'] , text_prop.attributes
                 if (i_element.nextSibling != None) :
                     i_element = i_element.nextSibling
                 else :
                     i_walk = False
 
+
+        print para_prop.attributes
         self.font = {}
         if para_prop != None : 
 #            print para_prop.attributes
@@ -274,6 +347,9 @@ class ODP_Text():
             i_font_size = text_prop.attributes['fo:font-size']
             i_font_underline = text_prop.attributes['style:text-underline-style']
             i_font_weight = text_prop.attributes['fo:font-weight']
+            if text_prop.attributes.has_key('fo:color'):
+                i_font_color = text_prop.attributes['fo:color']
+            else : i_font_color = '#000000'
 
         else: 
             #print "No text style"
@@ -282,6 +358,7 @@ class ODP_Text():
             i_font_size = '12pt'
             i_font_underline = 'none'
             i_font_weight = 'normal'
+            i_font_color = '#000000'
 
         self.font['font-family'] = i_font_family.strip("'")
 
@@ -306,6 +383,8 @@ class ODP_Text():
         elif (i_real_style[0] == 'Regular') : self.font['real-style'] = i_real_style[1]
         elif (i_real_style[1] == 'Regular') : self.font['real-style'] = i_real_style[0]
         else :self.font['real-style'] = " ".join(i_real_style)
+
+        self.font['color'] = HTMLColorToRGB(i_font_color)
 
 #        print self.font
         print ""
@@ -364,11 +443,8 @@ class ODP_Text():
         i_ratio_y = build_context.ratio_y
 
         i_font_size = (self.font['font-size']/cm)
-#        print i_font_size
         build_context.doc['line_offset'] += (i_font_size ) * len(self.paragraph.blPara.lines)
         i_name = "Text_%d" % ( i_text )
-        #print self.text.data.encode('utf-8')
-        #i_text = str(self.text.encode('utf-8'))
 
         #i_text = self.text.encode('utf-8')
         i_text = urllib.unquote(self.text)
@@ -396,12 +472,9 @@ class ODP_Text():
 #        img.save('%s.png' % i_name)
 #        print i_image_font.getsize(i_text)
 
-        b_material = Material.New("Mat_%s" % i_name)
-        b_material.rgbCol = [0.0 , 0.0 , 0.0]
-        b_material.setMode('Shadeless')
  
 
-        build_context.create_blender_text(i_name)
+        build_context.create_blender_text(i_name,self.font['color'])
         b_text = build_context.blender['text']
         
         #print b_text.activeFrame , b_text.totalFrames
@@ -420,7 +493,7 @@ class ODP_Text():
         b_mesh = Mesh.New(i_name)
         
         b_mesh.getFromObject(b_text_object,0,0)
-        b_mesh.materials += [b_material]       
+        b_mesh.materials += [build_context.blender['text_material']]
 #        b_object.setMaterials([b_material])
 
         b_object = b_scene.objects.new(b_mesh)
@@ -638,6 +711,13 @@ class ODP_Page() :
 
         self.name = x_page.getAttribute('name')
         self.masterpage = x_page.attributes['draw:master-page-name']
+
+        self.bg_name = doc.getStyleByName('%s-background' % self.masterpage).getElementsByType(style.GraphicProperties)[0].attributes['draw:fill-image-name']
+        for i in doc.getElementsByType(draw.FillImage):
+            if i.attributes['draw:name'] == self.bg_name:
+                self.bg_file = i.attributes['xlink:href']
+                self.bg_data = doc.Pictures[self.bg_file][1]
+                break
         
         #self.layout
 
@@ -702,7 +782,7 @@ class ODP_Page() :
         i_position_y = 0#1 * ( i_page )
         
 
-        build_context.create_blender_page(build_context.doc['page_size']['width'] , build_context.doc['page_size']['height'],i_name)
+        build_context.create_blender_page(build_context.doc['page_size']['width'] , build_context.doc['page_size']['height'],i_name , self.bg_data, self.bg_name)
         b_page = build_context.blender['page']
 #        b_mesh = Mesh.New(i_name)
 #        b_mesh.getFromObject(b_page,0,0)
@@ -899,6 +979,7 @@ if __name__ == '__main__':
     print odp_file    
 #    print template_file
     doc = load(odp_file)
+#    print doc.Pictures
     print ("DEBUG opendocument import with Blender in %s mode" % (Blender.mode))
 
     styles = {}
