@@ -23,7 +23,7 @@ import codecs
 import sys
 import os
 import math
-
+import copy
 import urllib
 
 import ImageFont,ImageFile,ImageDraw,Image
@@ -89,30 +89,41 @@ class BuildContext():
 #        self.blender['camera_object'].setLocation(6.7, -2.22 , 1)
 #        self.blender['scene'].objects.camera = self.blender['camera_object']
 
-        self.blender['text'] = Text3d.New("tmp_text") #Create the Text3d object
-        self.blender['text'].setExtrudeDepth(0)    #Give some relief 
-        self.blender['text'].setDefaultResolution(4)
-        self.blender['text'].setSpacing(0.92)
-        
-        self.blender['text_object'] = self.blender['scene'].objects.new(self.blender['text'])
-        self.blender['scene'].objects.unlink(self.blender['text_object'])
 #        print dir(self.blender['text'])
-        self.ratio_x = float( self.screen['width'] / ( self.screen['width'] % self.screen['height'] ) )
-        self.ratio_y = float( self.screen['height'] / ( self.screen['width'] % self.screen['height'] ) )
+
+
+        self.blender['slides'] = Blender.Object.Get('Slides')
+
+
+    def create_blender_page(self, width , height , name):
+        
+#        self.ratio_x = float( self.screen['width'] / ( self.screen['width'] % self.screen['height'] ) )
+#        self.ratio_y = float( self.screen['height'] / ( self.screen['width'] % self.screen['height'] ) )
+        self.ratio_x = float( width )
+        self.ratio_y = float( height)
 
         coord = [ [self.ratio_x/2,0,self.ratio_y/2] , [self.ratio_x/2,0,-self.ratio_y/2] , [-self.ratio_x/2,0,-self.ratio_y/2] , [-self.ratio_x/2 , 0 , self.ratio_y/2] ]
         faces = [ [ 3 , 2 , 1 , 0] ]
         
-        me = bpy.data.meshes.new('Page')
+        me = bpy.data.meshes.new(name)
 
         me.verts.extend(coord)
         me.faces.extend(faces)
 
         self.blender['page'] = self.blender['scene'].objects.new(me)
-        self.blender['scene'].objects.unlink(self.blender['page'])
+        #self.blender['scene'].objects.unlink(self.blender['page'])
 
 
-        self.blender['slides'] = Blender.Object.Get('Slides')
+    def create_blender_text(self,name):
+
+        self.blender['text'] = Text3d.New("Text3d_%s" % name) #Create the Text3d object
+        self.blender['text'].setExtrudeDepth(0)    #Give some relief 
+        self.blender['text'].setDefaultResolution(4)
+        #self.blender['text'].setSpacing(0.92)
+        
+        self.blender['text_object'] = self.blender['scene'].objects.new(self.blender['text'])
+        #self.blender['scene'].objects.unlink(self.blender['text_object'])
+        
 
     # Font loading
     def strip_fontconfig_family(self,family):
@@ -145,7 +156,9 @@ class BuildContext():
 
 class ODP_Text():
     
-    def __init__( self, x_text ,doc , styles , x_parent) :
+    def __init__( self, x_text ,doc , x_styles , x_parent) :
+
+        styles = copy.deepcopy(x_styles)
 
         self.attributes = x_text.attributes
         self.id = x_text.getAttribute('id')
@@ -153,6 +166,7 @@ class ODP_Text():
         self.type = None
         if self.style_name == None:
             self.style_name = x_parent.style_name
+
         #    print "Text Style = %s" % self.style_name
         #else:
         #    print "Text Style = %s , Parent Style = %s" % (self.style_name , x_parent.style_name)
@@ -164,12 +178,20 @@ class ODP_Text():
         self.level = 1
         parent = x_text.parentNode
 
+
         while (parent.tagName != 'draw:text-box') :
             if ( parent.parentNode.tagName == 'text:list-item') :
                 self.level += 1
             if ( parent.parentNode.tagName == 'text:list') :
                 self.type = 'list'
             parent = parent.parentNode
+
+        self.masterpage = x_parent.masterpage
+        self.masterclass = x_parent.masterclass
+
+        if (self.masterclass == 'outline'):
+            #print "%s-%s%d" % (self.masterpage , self.masterclass, self.level)
+            self.style_name = "%s-%s%d" % (self.masterpage , self.masterclass, self.level)
 
         #FIXME : the text may be contained in another text element :/ ... Fu#!@&ing XML
         tmp_text = x_text
@@ -187,28 +209,45 @@ class ODP_Text():
             #FIXME : replace bullet character from the corresponding style
             self.text = '- ' + x_text
 #            print repr(self.text) , dir(self.text)
-
+#        styles_tmp = styles.copy()
 #        doc.getStyleByName(self.style_name).attributes
-        
-        s = styles['styles'][self.style_name]
-        if s.attributes.has_key('style:parent-style-name') :
-            s = styles['styles'][s.attributes['style:parent-style-name']]
+        s = [styles['styles'][self.style_name]]
+        s_walk = styles['styles'][self.style_name]
+#        print s_walk.attributes['style:name']
+        while s_walk.attributes.has_key('style:parent-style-name'):
+            s_walk = styles['styles'][s_walk.attributes['style:parent-style-name']]
+#            print s_walk.attributes['style:name']
+            s.append(s_walk)
 
-        s_parent = styles['styles'][x_parent.style_name]
-        if s_parent.attributes.has_key('style:parent-style-name') :
-            s_parent = styles['styles'][s_parent.attributes['style:parent-style-name']]
+        for i in s:
+            print "DEBUG 1 : " , i.attributes['style:name']
+
+
+#        s_parent = styles['styles'][x_parent.style_name]
+#        if s_parent.attributes.has_key('style:parent-style-name') :
+#            s_parent = styles['styles'][s_parent.attributes['style:parent-style-name']]
 
         para_prop = None
         text_prop = None
 #        print para_prop.attributes
         #text_prop = s.getElementsByType(style.TextProperties)
-        for i_style in [s,s_parent]:
+        for i_style in s:
             i_walk = True
             i_element = i_style.firstChild
             while i_walk == True:
                 #print dir(i_element)
                 if i_element.tagName == 'style:text-properties':
-                    text_prop = i_element
+                    if text_prop == None :
+                        #text_prop = copy.deepcopy(i_element)
+                        text_prop = i_element
+                        print "DEBUG 2 : " , i_style.attributes['style:name'] , text_prop.attributes
+                    else :
+                        #i_tmp_element = copy.deepcopy(i_element)
+                        for key,value in i_element.attributes.items():
+                            if text_prop.attributes.has_key(key):
+                                i_element.attributes[key] = text_prop.attributes[key]
+                        text_prop = i_element
+                        print "DEBUG 2 : " , i_style.attributes['style:name'] , text_prop.attributes
                 if i_element.tagName == 'style:paragraph-properties':
                     para_prop = i_element
                 
@@ -219,7 +258,7 @@ class ODP_Text():
 
         self.font = {}
         if para_prop != None : 
-            #print para_prop.attributes
+#            print para_prop.attributes
             text_align = para_prop.attributes['fo:text-align']
             if text_align == 'start': self.font['text-align'] = Text3d.LEFT
             elif text_align == 'center': self.font['text-align'] = Text3d.MIDDLE
@@ -231,7 +270,8 @@ class ODP_Text():
             #print "No paragraph style"
             self.font['text-align'] = Text3d.LEFT
 
-        if text_prop != None : 
+        if text_prop != None :
+#            print text_prop.attributes 
             i_font_family = text_prop.attributes['fo:font-family']
             i_font_style = text_prop.attributes['fo:font-style']
             i_font_size = text_prop.attributes['fo:font-size']
@@ -270,8 +310,8 @@ class ODP_Text():
         elif (i_real_style[1] == 'Regular') : self.font['real-style'] = i_real_style[0]
         else :self.font['real-style'] = " ".join(i_real_style)
 
-        print self.font
-        #print ""
+#        print self.font
+        print ""
 
         self.paragraph = None
 
@@ -299,7 +339,7 @@ class ODP_Text():
 
     def debug_rl_story(self):
         #print { 'width':self.paragraph.width/cm , 'height':self.paragraph.height/cm , 'text':self.paragraph.text}
-        print self.paragraph._fixedWidth , self.paragraph._fixedHeight 
+#        print self.paragraph._fixedWidth , self.paragraph._fixedHeight 
         lines = []
         for l in self.paragraph.blPara.lines:
             lines.append(" ".join(l[1]))
@@ -326,9 +366,9 @@ class ODP_Text():
         i_ratio_x = build_context.ratio_x
         i_ratio_y = build_context.ratio_y
 
-        i_font_size = (self.font['font-size'] * 0.01)
-        print i_font_size
-        build_context.doc['line_offset'] += (i_font_size )
+        i_font_size = (self.font['font-size']/cm)
+#        print i_font_size
+        build_context.doc['line_offset'] += (i_font_size ) * len(self.paragraph.blPara.lines)
         i_name = "Text_%d" % ( i_text )
         #print self.text.data.encode('utf-8')
         #i_text = str(self.text.encode('utf-8'))
@@ -360,9 +400,11 @@ class ODP_Text():
 #        print i_image_font.getsize(i_text)
 
         b_material = Material.New("Mat_%s" % i_name)
-        b_material.rgbCol = [0.5 , 0.5 , 0.5]
+        b_material.rgbCol = [0.0 , 0.0 , 0.0]
         b_material.setMode('Shadeless')
  
+
+        build_context.create_blender_text(i_name)
         b_text = build_context.blender['text']
         
         #print b_text.activeFrame , b_text.totalFrames
@@ -385,7 +427,7 @@ class ODP_Text():
 #        b_object.setMaterials([b_material])
 
         b_object = b_scene.objects.new(b_mesh)
-        b_scene.objects.new(b_text)
+#        b_scene.objects.new(b_text)
 
         b_object.RotX = math.pi/2        
         
@@ -415,6 +457,8 @@ class ODP_TextBox() :
     def __init__( self , x_textbox , doc , styles , parent):
         self.texts = []
         self.style_name = parent.style_name 
+        self.masterpage = parent.masterpage
+        self.masterclass = parent.class_name
 
         self.addTextsFrom( x_textbox , doc , styles)
 
@@ -468,9 +512,11 @@ class ODP_TextBox() :
 
 class ODP_Frame() :
 
-    def __init__( self, x_frame , doc , styles) :
+    def __init__( self, x_frame , doc , styles , x_parent) :
 #        self.style_name = x_frame.getAttribute( 'stylename') 
 #        print x_frame.attributes
+
+        self.masterpage = x_parent.masterpage
 
         #FIXME : odfpy can't find presentation:style-name with getAttribute
         if x_frame.attributes.has_key('presentation:style-name'): self.style_name = x_frame.attributes['presentation:style-name']
@@ -551,10 +597,15 @@ class ODP_Frame() :
         i_ratio_y = build_context.ratio_y
 
         i_frame_layout = {}
-        i_frame_layout['w'] = self.width / i_page_size['width'] * i_ratio_x
-        i_frame_layout['h'] = self.height/ i_page_size['height'] * i_ratio_y
-        i_frame_layout['x'] = self.x / i_page_size['width'] * i_ratio_x
-        i_frame_layout['y'] = self.y / i_page_size['height'] * i_ratio_y
+#        i_frame_layout['w'] = self.width / i_page_size['width'] * i_ratio_x
+#        i_frame_layout['h'] = self.height/ i_page_size['height'] * i_ratio_y
+#        i_frame_layout['x'] = self.x / i_page_size['width'] * i_ratio_x
+#        i_frame_layout['y'] = self.y / i_page_size['height'] * i_ratio_y
+
+        i_frame_layout['w'] = self.width 
+        i_frame_layout['h'] = self.height
+        i_frame_layout['x'] = self.x
+        i_frame_layout['y'] = self.y
         build_context.doc['frame_layout'] = i_frame_layout
         
         for i_element in self.frame_elements:
@@ -633,7 +684,7 @@ class ODP_Page() :
             #print i_element.tagName
             if ( i_element.tagName == 'draw:frame' ) :
                 #FIXME : get Frame order with PageLayout
-                self.frames.append( ODP_Frame(i_element , doc , styles) )
+                self.frames.append( ODP_Frame(i_element , doc , styles , self) )
             if ( i_element.nextSibling != None ):
                 i_element = i_element.nextSibling
             else :
@@ -653,15 +704,22 @@ class ODP_Page() :
         i_position_x = 0
         i_position_y = 0#1 * ( i_page )
         
+
+        build_context.create_blender_page(build_context.doc['page_size']['width'] , build_context.doc['page_size']['height'],i_name)
         b_page = build_context.blender['page']
-        b_mesh = Mesh.New(i_name)
-        b_mesh.getFromObject(b_page,0,0)
-        b_object = b_scene.objects.new(b_mesh) 
-        b_object.setLocation( i_position_x , i_position_y , i_position_z )
-        b_object.makeDisplayList() 
+#        b_mesh = Mesh.New(i_name)
+#        b_mesh.getFromObject(b_page,0,0)
+#        b_object = b_scene.objects.new(b_mesh) 
+#        b_object.setLocation( i_position_x , i_position_y , i_position_z )
+#        b_object.makeDisplayList() 
+#        build_context.blender['slides'].makeParent([b_object],0,0)
+#        build_context.blender['current_page_obj'] = b_object
+
+        b_page.setLocation( i_position_x , i_position_y , i_position_z )
+        b_page.makeDisplayList() 
         
-        build_context.blender['slides'].makeParent([b_object],0,0)
-        build_context.blender['current_page_obj'] = b_object
+        build_context.blender['slides'].makeParent([b_page],0,0)
+        build_context.blender['current_page_obj'] = b_page
 
 
         for i_frame in self.frames :
@@ -864,7 +922,7 @@ if __name__ == '__main__':
 
     build_context = BuildContext()
     op = ODP_Presentation(doc.presentation , doc , styles)
-    print (unicode(op))
+#    print (unicode(op))
     op.build(build_context)
 
 #    for i in doc.getElementsByType(style.MasterPage):

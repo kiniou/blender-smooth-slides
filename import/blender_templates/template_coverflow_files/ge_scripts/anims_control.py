@@ -1,5 +1,10 @@
 from math import *
 
+inch = 72.0
+cm = inch / 2.54
+mm = cm * 0.1
+pica = 12.0
+
 co = GameLogic.getCurrentController()
 
 #get Scene
@@ -43,11 +48,11 @@ def send_to(object , subject , body , msg_actuator) :
 
 def update_slides_pos():
     bounds = 5
-    first_slide = max( [ int(prop['current_slide']) - bounds , 0] )
-    last_slide = min( [ int(prop['current_slide']) + bounds +1, prop['max_slides'] ] )
+    first_slide = max( [ int(prop['real_slide']) - bounds , 0] )
+    last_slide = min( [ int(prop['real_slide']) + bounds , prop['max_slides'] ] )
 
     all_slides = set(range(1,prop['max_slides']))
-    visible_slides = set(range(first_slide , last_slide) )
+    visible_slides = set(range(first_slide , last_slide + 1) )
     invisible_slides = all_slides.difference(visible_slides)
 
     for i in invisible_slides:
@@ -83,7 +88,12 @@ def update_slides_pos():
                 for c in slide.childrenRecursive:
                     c.visible = True
             #slide.position = [ diff*4 + dx , -( 1 - fabs(diff) ) * 6 ,0 ]
-            slide.position = [ i + 4* dx, ( 1 - fabs(dx) ) * -10 ,0 ]
+            faceup_len = ( 1 - fabs(dx) ) * -1.8 * cm
+            if (dx < 1.0 and dx > -1.0):
+                slide.position = [ i + (1 * cm * dx) , faceup_len ,0 ]
+            else :
+                slide.position = [ i + (1 * cm * (dx/fabs(dx))) , faceup_len ,0 ]
+            
             #slide.position = [ diff*4 + dx , max( [min( [-2*cos(diff*pi/2)+1,0] ) , -1] ) * 6 ,0 ]
             
             slide.orientation = glRotatef( rotation ,0,0,1 )
