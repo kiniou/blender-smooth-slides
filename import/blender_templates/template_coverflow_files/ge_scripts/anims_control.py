@@ -79,7 +79,6 @@ def update_slides_pos():
             dx = min([ dx ,  1.0 ])
         
         rotation = (-sin(dx * pi/2)) * ( -sin(cos(dx * pi/2)) + 1 ) * 90
-           
 
         if ( i > 0 and i < prop['max_slides'] ):
             slide = obj['OBPage_%d' % i]
@@ -89,10 +88,12 @@ def update_slides_pos():
                     c.visible = True
             #slide.position = [ diff*4 + dx , -( 1 - fabs(diff) ) * 6 ,0 ]
             faceup_len = ( 1 - fabs(dx) ) * -1.8 * cm
-            if (dx < 1.0 and dx > -1.0):
-                slide.position = [ i + (1 * cm * dx) , faceup_len ,0 ]
-            else :
-                slide.position = [ i + (1 * cm * (dx/fabs(dx))) , faceup_len ,0 ]
+#            if (dx < 1.0 and dx > -1.0):
+            slide.position = [ (i * 0.1* cm ) + (0.9 * cm * dx) , faceup_len ,0 ]
+#            else :
+                
+#                slide.position = [ (i*(0.5*cm)) + (1 * cm * dx) , faceup_len ,0 ]
+                #slide.position = [ i + (1 * cm * (dx/fabs(dx))) , faceup_len ,0 ]
             
             #slide.position = [ diff*4 + dx , max( [min( [-2*cos(diff*pi/2)+1,0] ) , -1] ) * 6 ,0 ]
             
@@ -106,8 +107,8 @@ def update_camera_pos():
     floor = obj['OBFloor']
     pos_camera = obj['OBCamera'].position
     pos_floor = obj['OBFloor'].position
-    camera.position = [position , pos_camera[1] , pos_camera[2]]
-    floor.position = [position , pos_floor[1] , pos_floor[2]]
+    camera.position = [position * 0.1 * cm , pos_camera[1] , pos_camera[2]]
+    floor.position = [position * 0.1 * cm, pos_floor[1] , pos_floor[2]]
 
 
 def glRotatef(angle , x , y , z):

@@ -44,9 +44,6 @@ from reportlab.lib.enums import *
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-#rl_config.shapeChecking = 0
-#rl_config.overlapAttachedSpace= 0
-
 
 global_fonts = {}
 
@@ -118,7 +115,7 @@ class BuildContext():
 
         self.blender['text'] = Text3d.New("Text3d_%s" % name) #Create the Text3d object
         self.blender['text'].setExtrudeDepth(0)    #Give some relief 
-        self.blender['text'].setDefaultResolution(4)
+        self.blender['text'].setDefaultResolution(1)
         #self.blender['text'].setSpacing(0.92)
         
         self.blender['text_object'] = self.blender['scene'].objects.new(self.blender['text'])
