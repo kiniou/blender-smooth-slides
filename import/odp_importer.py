@@ -132,11 +132,15 @@ class BuildContext():
 #                    b_img.setPixelI(x,y,(p[0],p[1],p[2],255))
 ##                    print b_img.getPixelI(x,y)
             b_img = BImage.Load('/home/kiniou/Projects/blender-scripts/import/tmp.png')
+            b_img.pack()
             b_texture = Texture.New(img_name)
             b_texture.setImage(b_img)
             b_material = Material.New(img_name)
             b_material.setTexture(0,b_texture,Texture.TexCo.UV,Texture.MapTo.COL)
-            print b_material.name
+#            b_material.setTranslucency(0.9)
+            #b_material.setAlpha(0.95)
+            #b_material.mode |= Material.Modes.ZTRANSP
+            #print b_material.name
         else:
             b_material = Material.Get(img_name)
 #        b_material.
@@ -162,9 +166,9 @@ class BuildContext():
         for i in me.faces:
             i.uv = uv
         #me.materials += [b_material]
-        print 'tot1'
+#        print 'tot1'
         me.materials = [b_material]
-        print 'tot2'
+#        print 'tot2'
 
         self.blender['page'] = self.blender['scene'].objects.new(me)
         #self.blender['scene'].objects.unlink(self.blender['page'])
@@ -203,7 +207,9 @@ class BuildContext():
                 continue
             file, family , style = l.split(':')
             family = self.strip_fontconfig_family(family)
-            style = style.split('=')[-1]
+            style = style.split('=')[-1].split(',')[0]
+            if style == 'Normal': style = 'Regular'
+#            print family , style
             if self.font_list.get(family,None) == None:
                 self.font_list[family] = {}
             self.font_list[family][style]={'path':file}
