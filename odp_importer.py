@@ -1,8 +1,25 @@
 #!BPY
+"""
+    Smooth Slides for Blender
+    Copyright © 2009 Kevin Roy
+
+    Smooth Slides for Blender is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+"""
 
 """ Registration info for Blender menus:
 Name: 'OpenDocumentPresentation (.odp)'
-Blender: 250
+Blender: 249
 Group: 'Import'
 Tip: 'OpenDocumentPresentation (*.odp)'
 """
@@ -15,6 +32,10 @@ This script import document from an Open Document Presentation
     version 0.1:
     create slides and text automagically
 """
+
+# TODO : find a way to load Blender python librairies without blender itself :)
+# TODO : reorganize and split the file for each importer objects
+
 import Blender
 from Blender import Text3d, Mesh, Camera, Mathutils,sys as bsys , Material , Texture , Image as BImage
 import bpy
@@ -32,9 +53,12 @@ import ImageFont,ImageFile,ImageDraw,Image
 
 import StringIO
 
+
+# TODO : check if there is a newer odfpy lib (if there isn't contribute because these lib worth it)
 from odf.opendocument import load,OpenDocumentPresentation
 from odf import text,presentation,draw,style,office
 
+# TODO : Get rid of reportlab lib (a bit too much to manage paragraphs) 
 from reportlab.platypus.flowables import Flowable, PTOContainer, KeepInFrame
 from reportlab.platypus.paragraph import Paragraph
 from reportlab.platypus.frames import Frame
@@ -50,6 +74,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 
 global_fonts = {}
+
+# TODO : put HTMLColorToRGB function into a tools.py file
 
 def HTMLColorToRGB(colorstring):
     """ convert #RRGGBB to an (R, G, B) tuple """
@@ -95,15 +121,6 @@ class BuildContext():
         self.blender['render'] = self.blender['scene'].getRenderingContext()
         self.blender['render'].enableGameFrameExpose()
 
-#        self.blender['camera'] = Camera.New('persp', 'CamViewer')
-#        self.blender['camera'].setLens(3.06)
-#        self.blender['camera_object'] = self.blender['scene'].objects.new(self.blender['camera'])
-#        self.blender['camera_object'].setLocation(6.7, -2.22 , 1)
-#        self.blender['scene'].objects.camera = self.blender['camera_object']
-
-#        print dir(self.blender['text'])
-
-
         self.blender['slides'] = Blender.Object.Get('Slides')
 
 
@@ -131,7 +148,8 @@ class BuildContext():
 #                    p = img.getpixel((x,y))
 #                    b_img.setPixelI(x,y,(p[0],p[1],p[2],255))
 ##                    print b_img.getPixelI(x,y)
-            b_img = BImage.Load('/home/kiniou/Projects/blender-scripts/import/tmp.png')
+            #b_img = BImage.Load('/home/kiniou/Projects/blender-scripts/import/tmp.png')
+            b_img = BImage.Load('tmp.png')
             b_img.pack()
             b_texture = Texture.New(img_name)
             b_texture.setImage(b_img)
@@ -936,7 +954,7 @@ class ODP_Presentation() :
 
 if __name__ == '__main__':
 
-    # TODO: Verify if script is installed in the plugins Blender directory
+    # TODO : Verify if script is installed in the plugins Blender directory
 
     odp_file = ''
 #    template_file = ''
@@ -953,6 +971,9 @@ if __name__ == '__main__':
         usage = "usage: blender -b -P %prog -- [options] filename"
         prog = "odp_importer.py"
         parser = OptionParser(usage=usage,prog=prog)
+
+        # TODO : add --text3d option to transform texts in images or 3D text ( may speed up things on eeepc )
+        # TODO : think about other options (animations speed , slideshow automatic ... may change along themes )
         
         parser.add_option("-q", "--quiet",
                           action="store_false", dest="verbose", default=True,

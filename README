@@ -1,9 +1,32 @@
-Blender Scripts by Kevin 'Kiniou' Roy
-=====================================
+[> Blender Smooth Slides:
 
-Here is a set of Blender Scripts sorted by type:
-./export/
-    This directory contains scripts which enable different kind of format to be exported
-./import/
-    This is the approximatively the same thing as above but inverted
+Blender is an incredible and polymorphic tool to create and prototype.
+This script/tool combines the game engine embedded inside Blender and the Open Document Presentation 
+standard to make your presentation sexier and smoother !
 
+The idea of this tool is to convert an ODP file into Blender "ready-to-run" Game Engine file with provided 
+templates with preloaded animations and transitions.
+
+[> Install:
+
+The script is run with the following commands :
+blender -b <template> -P odp_importer.py -- <odp file>
+
+parameters:
+<template> is the blender template with preloaded animations and transitions
+<odp file> is the presentation file you want to convert
+
+The script will result in a new Blender file named like the presentation file.
+
+[> Changelog :
+    v0.1 :
+        - Dirty proof of concept :P
+
+[> TODO
+    Write more documentation (indeed).
+    Add sort of option to use images to display texts instead of Text3D.
+    Add more interactive stuff inside templates (clickable images, animated models ...).
+
+[> Infos :
+author : Kevin Roy
+website : blog.knokorpo.fr
