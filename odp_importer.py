@@ -40,40 +40,40 @@ import Blender
 from Blender import Text3d, Mesh, Camera, Mathutils,sys as bsys , Material , Texture , Image as BImage
 import bpy
 
-import PIL
+import sys, zipfile
 
 import codecs
-import sys
 import os
 import math
 import copy
 import urllib
-import zipfile
-import ImageFont,ImageFile,ImageDraw,Image
+from PIL import ImageFont,ImageFile,ImageDraw,Image
 
 import StringIO
 
+import gtk
+import pango
+import cairo
+import pangocairo
 
 # TODO : check if there is a newer odfpy lib (if there isn't contribute because these lib worth it)
 from odf.opendocument import load,OpenDocumentPresentation
 from odf import text,presentation,draw,style,office
 
-# TODO : Get rid of reportlab lib (a bit too much to manage paragraphs) 
-from reportlab.platypus.flowables import Flowable, PTOContainer, KeepInFrame
-from reportlab.platypus.paragraph import Paragraph
-from reportlab.platypus.frames import Frame
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import *
-from reportlab.platypus.doctemplate import PageTemplate, BaseDocTemplate, FrameBreak , PageBreak , NextPageTemplate
-from reportlab.pdfgen import canvas
+IGNORE_TAGS = [
+    'presentation:notes',
+    'draw:page-thumbnail',
+    'anim:par',
+    'anim:seq',
+    'anim:set',
+    'office:forms',
+]    
 
-from reportlab import rl_config
-from reportlab.lib.enums import *
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+global options 
 
-
-global_fonts = {}
+def log_debug(line):
+    if options.verbose:
+        print 'DEBUG:\t' + line
 
 # TODO : put HTMLColorToRGB function into a tools.py file
 
@@ -92,6 +92,8 @@ class BuildContext():
     
     def __init__(self):
 
+        log_debug(' > Init building Context')
+
         # TODO : remove this variable when style will be handled
         self.doc = {}
         self.doc['current_page'] = 0
@@ -104,16 +106,47 @@ class BuildContext():
         
         self.screen = { 'width' : 800, 'height' : 600 }
 
+        log_debug('\t > Building fonts list')
+
+#        widget = gtk.Label()
+#        context = widget.create_pango_context()
+        fontdesc = pango.FontDescription("Liberation Sans 10")
+#        font = pango.Context.load_font(context, fontdesc)
+#        print fontdesc.to_filename()
+        image_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32,100,300)
+        cairo_context = cairo.Context(image_surface)
+        cairo_context.rectangle(0,0,100,300)
+        cairo_context.set_source_rgb(1,1,1)
+        cairo_context.fill()
+
+
+        pangocairo_context = pangocairo.CairoContext(cairo_context)
+        pangocairo_layout = pangocairo_context.create_layout()
+        pangocairo_layout.set_font_description(fontdesc)
+        pangocairo_layout.set_markup(""" Test Pango with Blender!!
+        Youyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouy
+ouyoyuouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyouyyuoyuyo
+sdvqsdfggqgergergzergzergzergezgzergzergzergergergzergaeghhthrtzthztzth
+zhrhzrhrthrhhrthrhrrzvzevatgbhrthhzrhrthrttr
+zrbhbrtbzbtrhzrhzrhrtbztbzbrtbzrtbzrbrtbrtbrtbtrtbzrvbrgfbrzbrtbrzbzrbrtbrtbrtbrzbzrbrtbrtbbrtbbzrtbrtzbzrbzrb
+        """)
+        pangocairo_layout.set_wrap(pango.WRAP_WORD) 
+        pangocairo_layout.set_width(100) 
+        cairo_context.set_source_rgb(0,0,0)
+        pangocairo_context.show_layout(pangocairo_layout)
+        cairo_context.show_page() 
+        image_surface.write_to_png('test.png')
         self.font_list = {}
-        self.load_fonts()
+       #self.load_fonts()
 
         #FIXME : Crappy hack because I run out of time :'(
-        global global_fonts 
-        global_fonts= self.font_list.copy()
+#      global_fonts= self.font_list.copy()
+#     log_debug('\t > End of building fonts list')
 
         self.blender = {}
         self.game = {}
         self.init_blender_file()
+        log_debug(' > End building Context')
 
     def init_blender_file(self):
         self.blender['scene'] = Blender.Scene.GetCurrent()
@@ -139,38 +172,18 @@ class BuildContext():
 
             img_bbox=img.getbbox()
             img.save('tmp.png')
-        #for k,v in Image.new.func_globals.items() : print k,v
-#            b_img = BImage.New( img_name , img_bbox[2], img_bbox[3], 32)
-#            b_img.source = BImage.Sources.STILL
-#            
-#            for x in range(0,img_bbox[2]):
-#                for y in range(0,img_bbox[3]):
-#                    p = img.getpixel((x,y))
-#                    b_img.setPixelI(x,y,(p[0],p[1],p[2],255))
-##                    print b_img.getPixelI(x,y)
-            #b_img = BImage.Load('/home/kiniou/Projects/blender-scripts/import/tmp.png')
             b_img = BImage.Load('tmp.png')
             b_img.pack()
             b_texture = Texture.New(img_name)
             b_texture.setImage(b_img)
             b_material = Material.New(img_name)
             b_material.setTexture(0,b_texture,Texture.TexCo.UV,Texture.MapTo.COL)
-#            b_material.setTranslucency(0.9)
-            #b_material.setAlpha(0.95)
-            #b_material.mode |= Material.Modes.ZTRANSP
-            #print b_material.name
         else:
             b_material = Material.Get(img_name)
-#        b_material.
-
-#        img.save('test.png')
 
 
-#        self.ratio_x = float( self.screen['width'] / ( self.screen['width'] % self.screen['height'] ) )
-#        self.ratio_y = float( self.screen['height'] / ( self.screen['width'] % self.screen['height'] ) )
         self.ratio_x = float( width )
         self.ratio_y = float( height)
-
         coord = [ [self.ratio_x/2,0,self.ratio_y/2] , [self.ratio_x/2,0,-self.ratio_y/2] , [-self.ratio_x/2,0,-self.ratio_y/2] , [-self.ratio_x/2 , 0 , self.ratio_y/2] ]
         faces = [ [ 3 , 2 , 1 , 0] ]
         
@@ -179,32 +192,27 @@ class BuildContext():
 
         me.verts.extend(coord)
         me.faces.extend(faces)
-#        me.addUVLayer('UVTex')
         uv = ( Mathutils.Vector([1,0]) , Mathutils.Vector([1,1]) , Mathutils.Vector([0,1]) , Mathutils.Vector([0,0]) )
         for i in me.faces:
             i.uv = uv
-        #me.materials += [b_material]
-#        print 'tot1'
+
         me.materials = [b_material]
-#        print 'tot2'
 
         self.blender['page'] = self.blender['scene'].objects.new(me)
-        #self.blender['scene'].objects.unlink(self.blender['page'])
 
 
     def create_blender_text(self,name, color):
-
-        b_material = Material.New("Mat_%s" % name)
-        b_material.rgbCol = [color[0] , color[1] , color[2] ]
-        b_material.setMode('Shadeless')
-        self.blender['text'] = Text3d.New("Text3d_%s" % name) #Create the Text3d object
-        self.blender['text'].setExtrudeDepth(0)    #Give some relief 
-        self.blender['text'].setDefaultResolution(1)
-        #self.blender['text'].setSpacing(0.92)
+        print "creating text %s with color %s" % (repr(name) , repr(color))
+       # b_material = Material.New("Mat_%s" % name)
+       # b_material.rgbCol = [color[0] , color[1] , color[2] ]
+       # b_material.setMode('Shadeless')
+       # self.blender['text'] = Text3d.New("Text3d_%s" % name) #Create the Text3d object
+       # self.blender['text'].setExtrudeDepth(0)    #Give some relief 
+       # self.blender['text'].setDefaultResolution(1)
         
-        self.blender['text_object'] = self.blender['scene'].objects.new(self.blender['text'])
-        self.blender['text_material'] = b_material
-        self.blender['scene'].objects.unlink(self.blender['text_object'])
+       # self.blender['text_object'] = self.blender['scene'].objects.new(self.blender['text'])
+       # self.blender['text_material'] = b_material
+       # self.blender['scene'].objects.unlink(self.blender['text_object'])
         
 
     # Font loading
@@ -726,70 +734,58 @@ class ODP_Frame() :
 
 class ODP_Page() :
 
-    def __init__( self, x_page , doc , styles) :
+    def __init__( self, element , options) :
         
-        self.name = ""
         self.frames = []
-        self.number = 0
-        self.attributes = x_page.attributes
+        self.attributes = element.attributes
 
-        self.name = x_page.getAttribute('name')
-        self.masterpage = x_page.attributes['draw:master-page-name']
+        self.elements_trig = {
+            'draw:frame' : self.do_frame,
+        }
+        self.options = options
 
-        self.bg_name = doc.getStyleByName('%s-background' % self.masterpage).getElementsByType(style.GraphicProperties)[0].attributes['draw:fill-image-name']
-        for i in doc.getElementsByType(draw.FillImage):
-            if i.attributes['draw:name'] == self.bg_name:
-                self.bg_file = i.attributes['xlink:href']
-                self.bg_data = doc.Pictures[self.bg_file][1]
-                break
-        
-        #self.layout
+        self.do_attributes()
 
-        if (len(styles['masterpages']) > 0) :
-            self.layout = styles['masterpages'][self.masterpage].attributes['style:page-layout-name']
-
-        print self.layout
-
-        if self.layout != None:
-            prop = styles['pagelayouts'][self.layout].getElementsByType(style.PageLayoutProperties)[0]
-            self.page_width = float(prop.attributes['fo:page-width'].replace('cm',''))
-            self.page_height = float(prop.attributes['fo:page-height'].replace('cm',''))
-
-        self.addFramesFrom(x_page , doc , styles)
-
-        self.rl_frames = []
-        self.rl_page = None
-
-    def create_rl_page( self , story):
-
-        for i_frame in self.frames:
-            rl_frame = i_frame.create_rl_frame(story,self)
-            if rl_frame!=None:
-                self.rl_frames.append(rl_frame)
-
-        self.rl_page = PageTemplate(self.name, self.rl_frames , pagesize=(self.page_width*cm,self.page_height*cm))
-
-#        story.append(PageBreak)
-        return self.rl_page
-
-    def debug_rl_story(self):
-        for i_frame in self.frames:
-            i_frame.debug_rl_story()
+        self.parse(element , 0)
 
 
-    def addFramesFrom( self , x_page , doc , styles) :
+    def do_attributes(self):
 
-        i_walk = True
-        i_element = x_page.firstChild
-        while ( i_walk == True ) :
-            #print i_element.tagName
-            if ( i_element.tagName == 'draw:frame' ) :
-                #FIXME : get Frame order with PageLayout
-                self.frames.append( ODP_Frame(i_element , doc , styles , self) )
-            if ( i_element.nextSibling != None ):
-                i_element = i_element.nextSibling
-            else :
-                i_walk = False
+        key_transform = {
+            'draw:name' : 'page:name',
+            'presentation:use-footer-name' : 'page:footer',
+            'presentation:use-date-time-name' : 'page:datetime',
+            'draw:master-page-name' : 'page:masterpage',
+            'draw:style-name' : 'page:style',
+        }
+
+        if self.attributes != None:
+            for attkey in self.attributes.keys():
+                log_debug('\t' + str(attkey) + '=' + unicode(self.attributes[attkey]).encode('utf-8'))
+                if   (attkey in key_transform) : self.options[key_transform[attkey]] = unicode(self.attributes[attkey]).encode('utf-8')
+
+    def do_frame(self,element):
+        self.do_nothing()
+
+    def parse( self , element , level) :
+        if (level != 0):
+            if ( level > 1 ) or (element.tagName in IGNORE_TAGS) : return
+            log_debug('\tPAGE > ' + element.tagName)
+
+            method = self.elements_trig.get(element.tagName)
+            if method : method(element)
+
+        if element.childNodes:
+                for elm in element.childNodes:
+                    self.parse(elm , level + 1)
+        else:
+                try:
+                    if ( element.data != None ) : print element.data
+                except:
+                    self.do_nothing()
+
+    def do_nothing(self) :
+        return
 
     def build( self , build_context) :
         build_context.doc['current_line'] = 0         
@@ -828,128 +824,123 @@ class ODP_Page() :
 
     def __str__( self ) :
         str = ""
-        str += "    |PAGE %s\n" % (self.name)
-        str += "    | number %s\n" % (self.number)
-        str += "    | attributes %s\n" % (self.attributes)
-        str += "    =====\n"
-        for frame in self.frames :
-            str += "%s" % (frame)
+        str += "\t|PAGE\n"
+        for okey in self.options.keys():
+            str += "\t| %-15s -> %s\n" % (okey , self.options[okey])
+        str += "\t=====\n"
+#        for frame in self.frames :
+#            str += "%s" % (frame)
         return str
+
+
+
+
 
 class ODP_Presentation() :
     
-    def __init__( self, x_presentation, doc , styles) :
-        self.footer = ""
-        self.time = ""
+    def __init__( self, x_document) :
+
+        self.document = x_document
+        self.elements_trig = {
+            'presentation:footer-decl'      : self.do_footer,
+            'presentation:date-time-decl'   : self.do_datetime,
+            'draw:page'                     : self.do_page,
+            'presentation:settings'         : self.do_settings,
+        }
+
         self.pages = []
+        self.page_current_number = 0
         
-        self.footer = x_presentation.getElementsByType( presentation.FooterDecl)[0].firstChild
-        self.time = x_presentation.getElementsByType( presentation.DateTimeDecl)[0].getAttribute( 'source' )
+        self.footer = {}
+        self.datetime = {}
 
         self.layout = None
         self.page_width = 0
         self.page_height = 0
         
+        self.parse(self.document.presentation, 0)
+
+#        self.parse(0,self.document.styles)
+#        for i in dir(self.document):
+#            print repr(i)
+
+    def parse( self , element , level) :
+
+        if (level != 0):
+            if ( level > 1 ) or (element.tagName in IGNORE_TAGS) : return
+            log_debug('PRESENTATION > ' + element.tagName)
+
+            method = self.elements_trig.get(element.tagName)
+            if method : method(element)
+
+        if element.childNodes:
+                for elm in element.childNodes:
+                    self.parse(elm , level + 1)
+        else:
+                try: #Retrieve non-xml data if there are some
+                    if ( element.data != None ) : print element.data
+                except:
+                    self.do_nothing()
+
+
+    def do_nothing(self):
+        return
+
+
+    def do_page(self, element):
+        self.page_current_number += 1
+
+        options = {
+            'page:number' : self.page_current_number,
+        }
+
+        log_debug('\tdoing a PAGE element')
+
+        #Add a page
+        self.pages.append( ODP_Page(element,options) )
         
-#        for i in doc.getElementsByType(style.MasterPage):
-#            print i.qname[1]
-#            print i.attributes
-#            self.layout = i.attributes['style:page-layout-name']
 
-#        if (len(styles['masterpages']) > 0) :
-#            styles['masterpages']. 
-#            self.layout = styles['masterpages'][0].attributes['style:page-layout-name']
-#
-#        if self.layout != None:
-#            prop = styles['pagelayouts'][self.layout].getElementsByType(style.PageLayoutProperties)
-#            self.page_width = j.attributes['fo:page-width']
-#            self.page_height = j.attributes['fo:page-height']
-#            for i in doc.getElementsByType(style.PageLayout):
-                #print i.qname[1]
-#                if ( i.attributes['style:name'] == self.layout) :
-#                    print i.qname[1]
-#                    print i.attributes
-#                    for j in i.getElementsByType(style.PageLayoutProperties):
-#                        print j.qname[1]
-#                        print j.attributes
-#                        self.page_width = j.attributes['fo:page-width']
-#                        self.page_height = j.attributes['fo:page-height']
+    def do_datetime(self, element):
+        log_debug('doing a DATETIME element')
+        if element.attributes != None:
+            for attkey in element.attributes.keys():
+                log_debug('\t' + str(attkey) + '=' + unicode(element.attributes[attkey]).encode('utf-8'))
+
+    def do_footer(self,element):
+
+        log_debug('doing a FOOTER element')
+        if element.attributes != None:
+            for attkey in element.attributes.keys():
+                log_debug('\t' + str(attkey) + '=' + unicode(element.attributes[attkey]).encode('utf-8'))
+        if element.childNodes:
+            for e in element.childNodes:
+                log_debug('\tFooter element : %s' % (e.tagName))
+                if (e.tagName == 'Text') : log_debug('\t\tFooter Text : %s' % (e))
+
+    def do_settings(self, element):
+        log_debug('doing a SETTINGS element')
+
+        if element.attributes != None:
+            for attkey in element.attributes.keys():
+                log_debug('\t' + str(attkey) + '=' + unicode(element.attributes[attkey]).encode('utf-8'))
         
-        self.addPagesFrom(x_presentation , doc , styles)
 
-        self.rl_doc = None
-        self.story = []
-        self.rl_pages = []
-
-        self.create_rl_doc()
-
-    def create_rl_doc(self):
-
-        for i_page in self.pages:
-            self.rl_pages.append( i_page.create_rl_page(self.story) )
-
-#        self.rl_doc = BaseDocTemplate("Test.pdf",
-#            pageTemplates = self.rl_pages,
-#            showBoundary = 1,
-#            verbose = False
-#            )
-
-        self.rl_doc = BaseDocTemplate("Test.pdf",
-            pageTemplates = self.rl_pages,
-            showBoundary = 1,
-            verbose = False
-            )
-
-        print self.story
-        #self.rl_doc.multiBuild(self.story,canvasMaker=canvas.Canvas(bottomup=1))
-        self.rl_doc.multiBuild(self.story)
-        self.debug_rl_story()
-
-    def debug_rl_story(self):
-        for i_page in self.pages:
-            i_page.debug_rl_story()
-
-    def addPagesFrom( self, x_presentation , doc, styles) :
-        
-        i_walk = True
-        i_element = x_presentation.firstChild
-        i_page_number = 0
-        while (i_walk == True):
-
-            if ( i_element.tagName == 'presentation:footer-decl') :
-                self.footer = i_element.firstChild
-        
-            if ( i_element.tagName == 'presentation:datetime-decl' ) :
-                self.time = i_element.getAttribute('source')
-            
-            if ( i_element.tagName == 'draw:page') :
-                i_page_number += 1
-                self.pages.append( ODP_Page( i_element , doc , styles) )
-                self.pages[-1].number = i_page_number
-
-            if (i_element.nextSibling != None) :
-                i_element = i_element.nextSibling
-            else :
-                i_walk = False
-                
     def build( self , build_context) :
         for i_page in self.pages :
             i_page.build(build_context)
-    #    print(build_context)
-
 
 
     def __str__(self):
         str = ""
         str += "|PRESENTATION\n"
-        str += "| Footer is %s\n" % (self.footer)
-        str += "| Time is %s\n" % (self.time)
-        str += "| Page Width %s\n" % (self.page_width)
-        str += "| Page Height %s\n" % (self.page_height)
         str += "=====\n"
         for p in self.pages:
             str += "%s\n" % p
         return str
+
+
+
+
 
 
 if __name__ == '__main__':
@@ -957,15 +948,10 @@ if __name__ == '__main__':
     # TODO : Verify if script is installed in the plugins Blender directory
 
     odp_file = ''
-#    template_file = ''
-    
 
-#    print Blender.mode
     if Blender.mode == 'background' or Blender.mode == 'interactive':
-#        print sys.argv
         real_argv_index = sys.argv.index('--') + 1
         real_argv=sys.argv[real_argv_index:]
-#        print real_argv
 
         from optparse import OptionParser
         usage = "usage: blender -b -P %prog -- [options] filename"
@@ -978,14 +964,10 @@ if __name__ == '__main__':
         parser.add_option("-q", "--quiet",
                           action="store_false", dest="verbose", default=True,
                           help="don't print status messages to stdout")
-#        parser.add_option("-t", "--template",
-#                          dest="template", default="template_coverflow",
-#                          help="specifies a Blender template [default = %default]")
 
         (options, args) = parser.parse_args(real_argv)
         print options , args
 
-#        template_file = Blender.sys.expandpath("//blender_templates/%s.blend" % (options.template))
 
         if len(args) == 0:
             parser.print_help()
@@ -996,17 +978,13 @@ if __name__ == '__main__':
         if Blender.sys.exists(args[0]) != 1:
             parser.print_help()
             parser.error("File '%s' does not exist or is not a file" % (args[0]))
-#        if Blender.sys.exists(template_file) != 1:
-#            parser.print_help()
-#            parser.error("Template '%s' does not exist or is not a file" % (template_file) )
             
     odp_file = args[0]
-#    Blender.Load(template_file)
 
     print odp_file    
-#    print template_file
+
     doc = load(odp_file)
-#    print doc.Pictures
+
     print ("DEBUG opendocument import with Blender in %s mode" % (Blender.mode))
 
     styles = {}
@@ -1023,59 +1001,22 @@ if __name__ == '__main__':
     for i in doc.getElementsByType(style.PageLayout) :
         styles['pagelayouts'][i.attributes['style:name']] = i
 
-    
+ 
+   
 
+    #Parse ODP file
+    op = ODP_Presentation(doc)
+    print op
+
+
+    #Initialization of fonts & others things
     build_context = BuildContext()
-    op = ODP_Presentation(doc.presentation , doc , styles)
-#    print (unicode(op))
-    op.build(build_context)
 
-#    for i in doc.getElementsByType(style.MasterPage):
-#        print i.qname[1]
-#        print i.attributes
-#    for i in doc.getElementsByType(style.PageLayout):
-#        print i.qname[1]
-#        print i.attributes
-#        for j in i.getElementsByType(style.PageLayoutProperties):
-#            print j.qname[1]
-#            print j.attributes
-    
+    #Convert and build the new blender presentation
+    #op.build(build_context)
+
+    #Save the blender presentation
     blender_file = Blender.sys.makename(odp_file,'.blend')
     Blender.Save(blender_file,1)
     print "Blender File created at '%s'" % (blender_file)
 
-#Blender.Quit()
-#for i in doc._extra:
-#    print i.mediatype , i.filename , i.content
-
-
-# Walking in the presentation
-#        level = 0
-#        element = presentation
-#        parent = None
-#
-#        while ( element!=None and level == 0 ) or level > 0 :
-#            
-#            if ( element != None ) :
-#                print "%s+-> %s" % ("    " * level , element.tagName )
-#
-#                if ( element.tagName == "presentation:footer-decl" ) : self.has_footer = True
-#                if ( element.tagName == "presentation:date-time-decl") : self.has_time = True
-#                if ( element.tagName == "draw:page"):
-#                    self.pages.append( ODP_Page( element.getAttribute("name") ) )
-#                
-#                parent = element.parentNode
-#
-#                if ( element.hasChildNodes() ) :
-#                    level += 1
-#                    element = element.firstChild
-#                else :
-#                    if ( element.nextSibling != None ) :
-#                        element = element.nextSibling
-#                    else :
-#                        level -= 1
-#                        element = parent.nextSibling
-#            else :
-#                level -= 1
-#                parent = parent.parentNode
-#                element = parent.nextSibling
