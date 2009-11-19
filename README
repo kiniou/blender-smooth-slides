@@ -1,5 +1,4 @@
 [> Blender Smooth Slides:
-
 Blender is an incredible and polymorphic tool to create and prototype.
 This script/tool combines the game engine embedded inside Blender and the Open Document Presentation 
 standard to make your presentation sexier and smoother !
@@ -10,6 +9,7 @@ templates with preloaded animations and transitions.
 [> Install:
 Before running the script you will need to install:
     Python Imaging Library (http://www.pythonware.com/products/pil)
+    GTK+ Python bindings (gtk , pango , cairo ...)
     ODFPY (http://forge.osor.eu/projects/odfpy/)
     
 The script is run with the following commands :
@@ -22,14 +22,18 @@ parameters:
 The script will result in a new Blender file named like the presentation file.
 
 [> Changelog :
+    v0.2 :
+        - Work in progress
     v0.1 :
         - Dirty proof of concept :P
 
 [> TODO
     Write more documentation (indeed).
-    Add sort of option to use images to display texts instead of Text3D.
+    Use images instead of Text3D (because fonts management is quite painfull and textured squared are lighter than complex vertexes).
+    Make all blender scripts & data files internal when creating the new blender file.
     Add more interactive stuff inside templates (clickable images, animated models ...).
+    Adapt the script with the new Blender 2.5 version
 
 [> Infos :
-author : Kevin Roy
+author : Kevin 'Kiniou' Roy
 website : blog.knokorpo.fr

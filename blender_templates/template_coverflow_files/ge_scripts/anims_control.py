@@ -76,8 +76,10 @@ def update_slides_pos():
     invisible_slides = all_slides.difference(visible_slides)
 
     for i in invisible_slides:
+        len_pagenum = len("%s" % prop['max_slides'])
         if ( i > 0 and i < prop['max_slides'] ):
-            slide = obj['OBPage_%d' % i]
+            i_name = ("OBPage_%0"+str(len_pagenum)+"d") % ( i )
+            slide = obj[i_name]
             if (slide.visible == True):
                 slide.visible = False
                 for c in slide.childrenRecursive:
@@ -100,8 +102,10 @@ def update_slides_pos():
         
         rotation = (-sin(dx * pi/2)) * ( -sin(cos(dx * pi/2)) + 1 ) * 90
 
+        len_pagenum = len("%s" % prop['max_slides'])
         if ( i > 0 and i < prop['max_slides'] ):
-            slide = obj['OBPage_%d' % i]
+            i_name = ("OBPage_%0"+str(len_pagenum)+"d") % ( i )
+            slide = obj[i_name]
             if ( slide.visible == False ):
                 slide.visible = True
                 for c in slide.childrenRecursive:

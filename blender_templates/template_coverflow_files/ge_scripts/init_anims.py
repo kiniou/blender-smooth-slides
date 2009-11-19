@@ -59,9 +59,10 @@ def init_slides_pos():
             diff = max( [ diff , -1.0 ] )
         else :
             diff = min( [ diff , 1.0 ] )
-
+        len_pagenum = len("%s" % prop['max_slides'])
         if ( i > 0 and i < prop['max_slides'] ):
-            slide = obj['OBPage_%d' % i]
+            i_name = ("OBPage_%0"+str(len_pagenum)+"d") % ( i )
+            slide = obj[i_name]
             slide.position = [ diff + dx/2 , 0 , (1 - fabs(diff) )*1.5  ]
             slide.orientation = glRotatef(-sin(diff * pi / 180.0 ) * 70,0,0,1)
 
