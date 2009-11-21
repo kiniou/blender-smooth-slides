@@ -84,7 +84,6 @@ def HTMLColorToRGB(colorstring):
 
 
 class ODP_Element:
-        
 
     def __init__(self) :
         self.namespace = 'element'
@@ -94,6 +93,7 @@ class ODP_Element:
         self.options = {}
         self.tags_ignored = ''
         self.blender_objects = {}
+        self.text = None
 
     def parse_tree(self, element, level=0 , stop_level=0 , filter_tags = True):
 
@@ -180,7 +180,7 @@ class BuildContext():
 
         # TODO : remove this variable when style will be handled
         
-        self.screen = { 'width' : 800, 'height' : 600 }
+#        self.screen = { 'width' : 800, 'height' : 600 }
 
 #        log_debug('\t > Building fonts list')
 
@@ -210,15 +210,11 @@ class BuildContext():
 #        image_surface.write_to_png('test.png')
 #        self.font_list = {}
 
-       #self.load_fonts()
-
-        #FIXME : Crappy hack because I run out of time :'(
-#      global_fonts= self.font_list.copy()
-#     log_debug('\t > End of building fonts list')
 
         self.blender = {}
         self.game = {}
         self.init_blender_file()
+        self.images = None
         log_debug(' > End building Context')
 
     def init_blender_file(self):
@@ -228,48 +224,8 @@ class BuildContext():
         self.blender['render'].enableGameFrameExpose()
 
         self.blender['slides'] = Blender.Object.Get('Slides')
-
-
-
-    def create_blender_page(self, width , height , name , img_data , img_name):
-        return        
-
-#        b_img = None
-#        img_list = BImage.Get()
-#        for i in img_list:
-#            if i.name == img_name:
-#                b_img = i
-#                break
-#        if  b_img == None:
-#            img_io = StringIO.StringIO(img_data)
-#            img = PIL.Image.open(img_io)
-#
-#            img_bbox=img.getbbox()
-#            img.save('tmp.png')
-#            b_img = BImage.Load('tmp.png')
-#            b_img.pack()
-#            b_texture = Texture.New(img_name)
-#            b_texture.setImage(b_img)
-#            b_material = Material.New(img_name)
-#            b_material.setTexture(0,b_texture,Texture.TexCo.UV,Texture.MapTo.COL)
-#        else:
-#            b_material = Material.Get(img_name)
-
-
-        
-
-#        me = bpy.data.meshes.new(name)
-#
-#        me.verts.extend(coord)
-#        me.faces.extend(faces)
-#        uv = ( Mathutils.Vector([1,0]) , Mathutils.Vector([1,1]) , Mathutils.Vector([0,1]) , Mathutils.Vector([0,0]) )
-#        for i in me.faces:
-#            i.uv = uv
-#
-#        me.materials = [b_material]
-#
-#        self.blender['page'] = self.blender['scene'].objects.new(me)
-
+#        log_debug("SLIDES > %s" % (self.blender['slides'].properties.keys()) )
+#        log_debug("SLIDES > type %s" % ( type(self.blender['slides'].properties) ) )
 
     def create_blender_text(self,name, color):
         print "creating text %s with color %s" % (repr(name) , repr(color))
@@ -285,394 +241,162 @@ class BuildContext():
        # self.blender['scene'].objects.unlink(self.blender['text_object'])
         
 
-    # Font loading
-    def strip_fontconfig_family(self,family):
-        # remove alt name
-        n = family.find(',')
-        if n > 0:
-            family = family[:n]
-        family = family.replace("\\-", "-")
-        family = family.strip()
-        return family
+#    # Font loading
+#    def strip_fontconfig_family(self,family):
+#        # remove alt name
+#        n = family.find(',')
+#        if n > 0:
+#            family = family[:n]
+#        family = family.replace("\\-", "-")
+#        family = family.strip()
+#        return family
+#
+#    def load_fonts(self):
+#        cmd = "fc-list : file family style"
+#        for l in os.popen(cmd).readlines() :
+#            l = l.strip()
+#            if l.find(':') < 0:
+#                continue
+#            file, family , style = l.split(':')
+#            family = self.strip_fontconfig_family(family)
+#            style = style.split('=')[-1].split(',')[0]
+#            if style == 'Normal': style = 'Regular'
+##            print family , style
+#            if self.font_list.get(family,None) == None:
+#                self.font_list[family] = {}
+#            self.font_list[family][style]={'path':file}
+#
+#        for family,styles in self.font_list.iteritems():
+#            for style , file in styles.iteritems():
+#                blender_font = Text3d.Font.Load(file['path'])
+#                file['blender'] = blender_font
+#                #print file['blender']
 
-    def load_fonts(self):
-        cmd = "fc-list : file family style"
-        for l in os.popen(cmd).readlines() :
-            l = l.strip()
-            if l.find(':') < 0:
-                continue
-            file, family , style = l.split(':')
-            family = self.strip_fontconfig_family(family)
-            style = style.split('=')[-1].split(',')[0]
-            if style == 'Normal': style = 'Regular'
-#            print family , style
-            if self.font_list.get(family,None) == None:
-                self.font_list[family] = {}
-            self.font_list[family][style]={'path':file}
+class ODP_TextList(ODP_Element):
+    def __init__( self, x_element) :
+        ODP_Element.__init__(self) 
+        self.namespace = 'text-list'
+        self.name = self.namespace.upper()
+        self.data = None
+#        self.options.update( {self.namespace + ':name' : ''} )
+        
+        self.triggers = {
+            'text:list' : self.do_attributes,
+        }
 
-        for family,styles in self.font_list.iteritems():
-            for style , file in styles.iteritems():
-                blender_font = Text3d.Font.Load(file['path'])
-                file['blender'] = blender_font
-                #print file['blender']
+        self.list = []
 
-class ODP_Text():
+        global prog_options
+        verbose_tmp = prog_options.verbose
+        prog_options.verbose = True
+        self.parse_tree(x_element, 0,None)
+        log_debug('attributes %s' % (self.options) )
+        prog_options.verbose = verbose_tmp
+        
+
+class ODP_TextSpan(ODP_Element):
+    def __init__( self, x_element) :
+        ODP_Element.__init__(self)
+        self.namespace = 'text-p'
+        self.name = self.namespace.upper()
+        self.data = None
+#        self.options.update( {self.namespace + ':name' : ''} )
+        
+        self.triggers = {
+            'text:span' : self.do_attributes,
+        }
+
+        self.list = []
+
+        global prog_options
+        verbose_tmp = prog_options.verbose
+        prog_options.verbose = True
+        self.parse_tree(x_element, 0,1)
+        log_debug('attributes %s' % (self.options) )
+        prog_options.verbose = verbose_tmp
+   
+    def __str__(self):
+        str = ""
+        str += "                    | %s\n" % self.name
+        if (self.text != None) :
+            str+="                   | %s\n" % (self.text)
+        str += "                    ===="
+        return str
+
+class ODP_TextP(ODP_Element):
     
-    def __init__( self, x_text ,doc , x_styles , x_parent) :
-
-        styles = copy.deepcopy(x_styles)
-
-        self.attributes = x_text.attributes
-        self.id = x_text.getAttribute('id')
-        self.style_name = x_text.getAttribute( 'stylename' )
-        self.type = None
-        if self.style_name == None:
-            self.style_name = x_parent.style_name
-
-        #    print "Text Style = %s" % self.style_name
-        #else:
-        #    print "Text Style = %s , Parent Style = %s" % (self.style_name , x_parent.style_name)
-
-            
-
-        self.cond_style_name = x_text.getAttribute( 'condstylename' )
-        self.class_names = x_text.getAttribute( 'classnames' )
-        self.level = 1
-        parent = x_text.parentNode
-
-
-        while (parent.tagName != 'draw:text-box') :
-            if ( parent.parentNode.tagName == 'text:list-item') :
-                self.level += 1
-            if ( parent.parentNode.tagName == 'text:list') :
-                self.type = 'list'
-            parent = parent.parentNode
-
-        self.masterpage = x_parent.masterpage
-        self.masterclass = x_parent.masterclass
-
-        if (self.masterclass == 'outline'):
-            #print "%s-%s%d" % (self.masterpage , self.masterclass, self.level)
-            self.style_name = "%s-%s%d" % (self.masterpage , self.masterclass, self.level)
-
-        #FIXME : the text may be contained in another text element :/ ... Fu#!@&ing XML
-        tmp_text = x_text
-        while(tmp_text != None):
-            if hasattr(tmp_text.firstChild,'data'):
-                x_text = tmp_text.firstChild.data
-                break
-            tmp_text = tmp_text.firstChild
-
-        if (tmp_text == None) : x_text = ''
-
-        if (self.type == None):
-            self.text = x_text
-        elif (self.type == 'list'):
-            #FIXME : replace bullet character from the corresponding style
-            self.text = '- ' + x_text
-#            print repr(self.text) , dir(self.text)
-#        styles_tmp = styles.copy()
-#        doc.getStyleByName(self.style_name).attributes
-        s = [styles['styles'][self.style_name]]
-        s_walk = styles['styles'][self.style_name]
-#        print s_walk.attributes['style:name']
-        while s_walk.attributes.has_key('style:parent-style-name'):
-            s_walk = styles['styles'][s_walk.attributes['style:parent-style-name']]
-#            print s_walk.attributes['style:name']
-            s.append(s_walk)
-
-#        for i in s:
-#            print "DEBUG 1 : " , i.attributes['style:name']
-
-
-#        s_parent = styles['styles'][x_parent.style_name]
-#        if s_parent.attributes.has_key('style:parent-style-name') :
-#            s_parent = styles['styles'][s_parent.attributes['style:parent-style-name']]
-
-        para_prop = None
-        text_prop = None
-#        print para_prop.attributes
-        #text_prop = s.getElementsByType(style.TextProperties)
-        for i_style in s:
-            i_walk = True
-            i_element = i_style.firstChild
-            while i_walk == True:
-                #print dir(i_element)
-                if i_element.tagName == 'style:text-properties':
-                    if text_prop == None :
-                        #text_prop = copy.deepcopy(i_element)
-                        text_prop = i_element
-#                        print "DEBUG 2 : " , i_style.attributes['style:name'] , text_prop.attributes
-                    else :
-                        #i_tmp_element = copy.deepcopy(i_element)
-                        for key,value in i_element.attributes.items():
-                            if text_prop.attributes.has_key(key):
-                                i_element.attributes[key] = text_prop.attributes[key]
-                        text_prop = i_element
-#                        print "DEBUG 2 : " , i_style.attributes['style:name'] , text_prop.attributes
-                if i_element.tagName == 'style:paragraph-properties':
-                    if para_prop == None :
-                        para_prop = i_element
-                
-                    else :
-                        #i_tmp_element = copy.deepcopy(i_element)
-                        for key,value in i_element.attributes.items():
-                            if para_prop.attributes.has_key(key):
-                                i_element.attributes[key] = para_prop.attributes[key]
-                        para_prop = i_element
-#                        print "DEBUG 2 : " , i_style.attributes['style:name'] , text_prop.attributes
-                if (i_element.nextSibling != None) :
-                    i_element = i_element.nextSibling
-                else :
-                    i_walk = False
-
-
-        print para_prop.attributes
-        self.font = {}
-        if para_prop != None : 
-#            print para_prop.attributes
-            text_align = para_prop.attributes['fo:text-align']
-            if text_align == 'start': self.font['text-align'] = Text3d.LEFT
-            elif text_align == 'center': self.font['text-align'] = Text3d.MIDDLE
-            elif text_align == 'end': self.font['text-align'] = Text3d.RIGHT
-            else: self.font['text-align'] = Text3d.LEFT
-            
-            
-        else:
-            #print "No paragraph style"
-            self.font['text-align'] = Text3d.LEFT
-
-        if text_prop != None :
-#            print text_prop.attributes 
-            i_font_family = text_prop.attributes['fo:font-family']
-            i_font_style = text_prop.attributes['fo:font-style']
-            i_font_size = text_prop.attributes['fo:font-size']
-            i_font_underline = text_prop.attributes['style:text-underline-style']
-            i_font_weight = text_prop.attributes['fo:font-weight']
-            if text_prop.attributes.has_key('fo:color'):
-                i_font_color = text_prop.attributes['fo:color']
-            else : i_font_color = '#000000'
-
-        else: 
-            #print "No text style"
-            i_font_family = 'Liberation Sans'
-            i_font_style = 'normal'
-            i_font_size = '12pt'
-            i_font_underline = 'none'
-            i_font_weight = 'normal'
-            i_font_color = '#000000'
-
-        self.font['font-family'] = i_font_family.strip("'")
-
-        if i_font_style == 'italic' :
-            self.font['font-style'] = 'Italic'
-        elif i_font_style == 'normal' :
-            self.font['font-style'] = 'Regular'
-
-
-        self.font['font-size'] = float(i_font_size.replace("pt",""))
-
-        if i_font_underline != 'none':
-            self.font['font-underline'] = True
+    def __init__( self, x_element) :
+        ODP_Element.__init__(self)
+        self.namespace = 'text-p'
+        self.name = self.namespace.upper()
+        self.data = None
+#        self.options.update( {self.namespace + ':name' : ''} )
         
-        if i_font_weight != 'normal' :
-            self.font['font-weight'] = 'Bold'
-        else: 
-            self.font['font-weight'] = 'Regular'
+        self.triggers = {
+            'text:p' : self.do_attributes,
+            'text:span' : self.do_textspan,
+        }
 
-        i_real_style = [self.font['font-weight'] , self.font['font-style']]
-        if (i_real_style[0] == i_real_style[1] ) : self.font['real-style'] = i_real_style[0]
-        elif (i_real_style[0] == 'Regular') : self.font['real-style'] = i_real_style[1]
-        elif (i_real_style[1] == 'Regular') : self.font['real-style'] = i_real_style[0]
-        else :self.font['real-style'] = " ".join(i_real_style)
+        self.list = []
 
-        self.font['color'] = HTMLColorToRGB(i_font_color)
+        global prog_options
+        verbose_tmp = prog_options.verbose
+        prog_options.verbose = True
+        self.parse_tree(x_element, 0,1)
+        log_debug('attributes %s' % (self.options) )
+        prog_options.verbose = verbose_tmp
 
-#        print self.font
-        print ""
-
-        self.paragraph = None
-
-        styleSheet = getSampleStyleSheet()
-
-        self.styleSheet = styleSheet['BodyText']
-
-        self.styleSheet.fontSize = self.font['font-size']
-        if self.font['text-align'] == Text3d.LEFT:
-            self.styleSheet.alignment = TA_LEFT 
-        elif self.font['text-align'] == Text3d.RIGHT:
-            self.styleSheet.alignment = TA_RIGHT
-        elif self.font['text-align'] == Text3d.MIDDLE:
-            self.styleSheet.alignement = TA_CENTER
-
-
-        pdfmetrics.registerFont(TTFont(self.font['font-family'],global_fonts[self.font['font-family']][self.font['real-style']]['path']))
-
-        self.styleSheet.fontName = self.font['font-family']
-
-    def create_rl_text(self , story):
-        
-        self.paragraph = Paragraph(self.text.encode('utf-8'),self.styleSheet)
-        return self.paragraph
-
-    def debug_rl_story(self):
-        #print { 'width':self.paragraph.width/cm , 'height':self.paragraph.height/cm , 'text':self.paragraph.text}
-#        print self.paragraph._fixedWidth , self.paragraph._fixedHeight 
-        lines = []
-        for l in self.paragraph.blPara.lines:
-            lines.append(" ".join(l[1]))
-        
-#        self.font['font-size'] = self.paragraph.blPara.fontSize
-
-#        print self.font
-
-        self.text = urllib.quote("\n".join(lines) )
-#        print urllib.unquote(self.text)
+    def do_textspan(self, element):
+        self.list.append( ODP_TextSpan(element) )
 
     def build( self , build_context) :
-        build_context.doc['current_line'] += 1
-        build_context.doc['current_text'] += 1
-        i_page = build_context.doc['current_page']
-        i_frame = build_context.doc['current_frame']
-        i_frame_layout = build_context.doc['frame_layout']
-        i_element = build_context.doc['current_element']
-        i_element_type = build_context.doc['current_element_type']
-        i_line = build_context.doc['current_line']
-        i_line_offset = build_context.doc['line_offset']
-        i_text = build_context.doc['current_text']
-        
-        i_ratio_x = build_context.ratio_x
-        i_ratio_y = build_context.ratio_y
-
-        i_font_size = (self.font['font-size']/cm)
-        build_context.doc['line_offset'] += (i_font_size ) * len(self.paragraph.blPara.lines)
-        i_name = "Text_%d" % ( i_text )
-
-        #i_text = self.text.encode('utf-8')
-        i_text = urllib.unquote(self.text)
-
-        #Calculation of base coordinates for the text
-
-#        if self.font['text-align'] == Text3d.LEFT : i_start_x = -i_ratio_x/2.0
-#        elif self.font['text-align'] == Text3d.RIGHT : i_start_x = i_ratio_x/2.0
-#        else : i_start_x = 0
-#
-        i_start_x = -i_ratio_x/2.0
-        i_start_y = i_ratio_y/2.0
-        
-        i_frame_x = i_start_x + i_frame_layout['x']
-        i_frame_y = i_start_y - i_frame_layout['y']
-
-        i_position_z = i_frame_y - i_line_offset - i_font_size# - 0.2 * ( i_line )
-        i_position_x = i_frame_x + 0.2 * ( self.level - 1 )
-        i_position_y = -0.01 #0.95 * ( i_page )
-
-#        i_image_font =  ImageFont.truetype(build_context.font_list[self.font['font-family']][self.font['real-style']]['path'] , size=int(self.font['font-size']) , encoding='unic')
-#        img = Image.new('RGB' , size=i_image_font.getsize(i_text))
-#        draw = ImageDraw.Draw(img)
-#        draw.text((0,0),i_text,font=i_image_font)
-#        img.save('%s.png' % i_name)
-#        print i_image_font.getsize(i_text)
-
- 
-
-        build_context.create_blender_text(i_name,self.font['color'])
-        b_text = build_context.blender['text']
-        
-        #print b_text.activeFrame , b_text.totalFrames
-        b_text.frameWidth = i_frame_layout['w']
-        b_text.frameHeight = i_font_size#i_frame_layout['h']
-        b_text.frameX = 0.0
-        b_text.frameY = 0.0 # i_line_offset - i_font_size
-
-        b_text_object = build_context.blender['text_object']
-        b_scene = build_context.blender['scene']
-        #print ("%r" % (self.text.data), i_name, b_text.getSize())
-        b_text.setText(i_text)   #Set the text for Text3d object
-        b_text.setAlignment(self.font['text-align'])
-        b_text.setSize(i_font_size)
-        b_text.setFont(build_context.font_list[self.font['font-family']][self.font['real-style']]['blender'] ) #Set the font to Text3d object
-        b_mesh = Mesh.New(i_name)
-        
-        b_mesh.getFromObject(b_text_object,0,0)
-        b_mesh.materials += [build_context.blender['text_material']]
-#        b_object.setMaterials([b_material])
-
-        b_object = b_scene.objects.new(b_mesh)
-#        b_scene.objects.new(b_text)
-
-        b_object.RotX = math.pi/2        
-        
-        b_object.setLocation( i_position_x , i_position_y , i_position_z )
-
-        b_object.makeDisplayList()
-
-        build_context.blender['current_page_obj'].makeParent([b_object],0,0)
+        self.do_nothing()
 
     def __str__( self ) :
         str = ""
 
-        str+="                   |TEXT\n"
-        str+="                   | classnames    : %s\n" % (self.class_names)
-        str+="                   | condstylename : %s\n" % (self.cond_style_name)
-        str+="                   | stylename     : %s\n" % (self.style_name)
-        str+="                   | id            : %s\n" % (self.id)
-        #str+="                   | text          : %s\n" % (unicode(self.text))
-        str+="                   | text          : %s\n" % (self.text)
-        str+="                   | attributes    : %s\n" % (self.attributes)
-        str+="                   | level         : %s\n" % (self.level)
+        str+="                   |%s\n" % (self.name)
+        if (self.text != None) :
+            str+="                   | %s\n" % (self.text)
         str+="                   =====\n"
         
         return str
 
-class ODP_TextBox() :
-    def __init__( self , x_textbox , doc , styles , parent):
+class ODP_TextBox(ODP_Element) :
+    textbox_counter = 0
+
+    def __init__( self , x_element):
+        ODP_Element.__init__(self)
+        self.namespace = 'text-box'
+        self.name = self.namespace.upper()
+        self.data = None
+
+        self.__class__.textbox_counter += 1
+        self.options.update( {self.namespace + ':number' : self.__class__.textbox_counter} )
+        
+        self.triggers = {
+            'draw:text-box' : self.do_attributes,
+            'text:p' : self.do_textp,
+            'text:list' : self.do_textlist,
+        }
+
         self.texts = []
-        self.style_name = parent.style_name 
-        self.masterpage = parent.masterpage
-        self.masterclass = parent.class_name
 
-        self.addTextsFrom( x_textbox , doc , styles)
+        global prog_options
+        verbose_tmp = prog_options.verbose
+        prog_options.verbose = True
+        self.parse_tree(x_element, 0,1)
+        log_debug('attributes %s' % (self.options) )
+        prog_options.verbose = verbose_tmp
+       
+    def do_textp(self, element):
+        self.texts.append( ODP_TextP(element) )
 
-        self.paragraphs = [] 
-
-        
-    def create_rl_paragraphs(self , story):
-        
-        for i_text in self.texts :
-            self.paragraphs.append(i_text.create_rl_text(story))
-
-        return self.paragraphs
-
-    def debug_rl_story(self):
-        for i_text in self.texts :
-            i_text.debug_rl_story()
-
-    def addTextsFrom( self, x_textbox , doc , styles) :
-
-        i_texts = x_textbox.getElementsByType(text.P)
-        for i_text in i_texts:
-            self.texts.append( ODP_Text(i_text , doc , styles , self) )
-
-#        i_walk = True
-#        i_element = x_textbox.firstChild
-#        while ( i_walk == True ) :
-#
-#            if ( i_element.tagName == 'text:p' ) :
-#                self.texts.append( ODP_Text( i_element ) )
-#
-#            if ( i_element.nextSibling != None ) :
-#                i_element = i_element.nextSibling
-#            else :
-#                i_walk = False
-
+    def do_textlist(self, element):
+        self.texts.append( ODP_TextList(element) )
+ 
     def build( self , build_context) :
-        build_context.doc['current_element'] += 1
-        build_context.doc['current_element_type'] = "tb"
-        build_context.doc['line_offset'] = 0
-        for n,i_text in enumerate(self.texts) :
-            #build_context['line-number'] += 1
-            i_text.build( build_context )
+        self.do_nothing()
 
     def __str__( self ) :
         str = ""
@@ -683,6 +407,7 @@ class ODP_TextBox() :
         return str
 
 class ODP_Frame(ODP_Element) :
+    frame_counter = 0    
 
     def __init__(self,x_element) :
         ODP_Element.__init__(self)
@@ -690,34 +415,59 @@ class ODP_Frame(ODP_Element) :
         self.name = self.namespace.upper()
         self.data = None
 
-        self.attr_transform = {}
-        self.triggers = {
-            'draw:frame' : self.do_attributes,
-            'draw:text-box' : self.debug_attributes,
-            'text:p' : self.debug_attributes,
+        self.frame_elements = []
+
+        self.attr_transform = {
+            'svg:x' : self.namespace + ':x',
+            'svg:y' : self.namespace + ':y',
+            'svg:width' : self.namespace + ':width',
+            'svg:height' : self.namespace + ':height',
+            'draw:layer' : self.namespace + ':layer',
+            'presentation:class' : self.namespace + ':pr-class',
+            'presentation:style-name' : self.namespace + ':pr-style',
+            'draw:id' : self.namespace + ':id',
+            'presentation:user-transformed' : self.namespace + 'user-transformed',
             
         }
+        self.triggers = {
+            'draw:frame' : self.do_attributes,
+            'draw:text-box' : self.do_textbox,
+            'draw:image' : self.do_image,
+        }
 
-        self.options.update( {self.namespace + ':name' : ''} )
+        self.__class__.frame_counter += 1
+        self.options.update( {self.namespace + ':number' : self.__class__.frame_counter} )
         
         global prog_options
         verbose_tmp = prog_options.verbose
         prog_options.verbose = True
-        self.parse_tree(x_element, 0,None)
+        self.parse_tree(x_element, 0,1)
         log_debug('attributes %s' % (self.options) )
         prog_options.verbose = verbose_tmp
 
-    def build(self, build_context):
+    def do_textbox(self,element) :
+        self.frame_elements.append( ODP_TextBox(element) )
+
+    def do_image(self,element):
         self.do_nothing()
+
+    def build(self, build_context):
+        for i in self.frame_elements:
+            i.build(build_context)
 
     def __str__(self):
         str=""
         str+="         |FRAME \n"
         str+="         =====\n"
 
+        for i in self.frame_elements :
+            str += "%s" % i
+
         return str
 
 class ODP_Image(ODP_Element):
+    image_counter = 0
+
     def __init__(self , x_element):
         ODP_Element.__init__(self)
 
@@ -737,6 +487,7 @@ class ODP_Image(ODP_Element):
             'text:p' : self.debug_attributes,
         }
 
+        self.__class__.image_counter += 1
         self.options.update({self.namespace + ':name' : ''})
         global prog_options
         verbose_tmp = prog_options.verbose
@@ -746,7 +497,7 @@ class ODP_Image(ODP_Element):
         log_debug('attributes %s' % (self.options) )
         prog_options.verbose = verbose_tmp
 
-        if (self.options[self.namespace + ':name'] == '') : self.options.update( {self.namespace + ':name' : self.options[self.namespace + ':href'] } )
+        if (self.options[self.namespace + ':name'] == '') : self.options.update( {self.namespace + ':name' : "Picture_%04d" % self.__class__.image_counter } )
 
 
     def apply_pictures(self , pictures = {}) :
@@ -771,10 +522,10 @@ class ODP_Image(ODP_Element):
             ratio = (float(img.size[0]) / float(img.size[1]))
 
 #            #Resize the image if width or height are greater than 256
-#            if (img.size[0] > 256 ):
-#                img = img.resize((256 , int(256 / ratio)) , PIL.Image.BICUBIC)
-#            elif (img.size[1] > 256) :
-#                img = img.resize((int(256 * ratio) , 256) , PIL.Image.BICUBIC)
+            if (img.size[0] > 256 ):
+                img = img.resize((256 , int(256 / ratio)) , PIL.Image.BICUBIC)
+            elif (img.size[1] > 256) :
+                img = img.resize((int(256 * ratio) , 256) , PIL.Image.BICUBIC)
 
             tmpfile = tempfile.NamedTemporaryFile(suffix="BSM.png",delete=False)
 #            print dir(tmpfile) , tmpfile.name
@@ -785,11 +536,12 @@ class ODP_Image(ODP_Element):
             tmpfile.close()
             
             b_image = Blender.Image.Load("%s" % tmpfile.name)
-            b_image.pack()
-            b_image.setFilename(self.get_options('name'))
+            log_debug("Packing Image")
             b_image.setName(self.get_options('name'))
+            b_image.pack()
+            #b_image.setFilename(self.get_options('name'))
 
-            os.remove(tmpfile.name)
+#            os.remove(tmpfile.name)
             
 
             log_debug("   PIL : name %s" % self.get_options('name') )
@@ -1005,8 +757,8 @@ class ODP_Page(ODP_Element) :
     def __str__( self ) :
         str = ""
         str += "\t|PAGE\n"
-        for okey in self.options.keys():
-            str += "\t| %-15s -> %s\n" % (okey , self.options[okey])
+        for o_key in self.options.keys():
+            str += "\t| %-15s -> %s\n" % (o_key , self.options[o_key])
         str += "\t=====\n"
         for frame in self.frames :
             str += "%s" % (frame)
@@ -1050,6 +802,10 @@ class ODP_Presentation(ODP_Element) :
         self.images = {}
         for i in x_document.getElementsByType(draw.Image):
             img = ODP_Image(i)
+            img.apply_pictures(x_document.Pictures)
+            if (img.build(build_context)) :
+                log_debug(img.blender_objects)
+            log_debug(img)
             self.images[img.options['image:name']] = img 
 
         self.presentationpagelayouts = {}
@@ -1085,7 +841,7 @@ class ODP_Presentation(ODP_Element) :
                 log_debug(p)
             self.pages.append(p)
 
-
+        build_context.images = self.images
         
     def do_page(self, element):
         options = {'page:number':self.page_current_number}

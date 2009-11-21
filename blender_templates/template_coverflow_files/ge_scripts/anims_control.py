@@ -87,6 +87,7 @@ def update_slides_pos():
 
     for i in visible_slides:
         dx = i - prop['real_slide']
+    
         diff = dx
 #        if ( i == int(prop['selected_slide']) ):
 #            coef = -sin(dx * pi)
@@ -95,11 +96,11 @@ def update_slides_pos():
 #        if i == 1 : set_prop('debug',dx)
 #            coef = -( sin(dx * pi) + 1) / 2.0
 #        dist = i - prop['selected_slide']
+
         if ( dx < 0 ):
             dx = max([ dx , -1.0 ])
         else :
             dx = min([ dx ,  1.0 ])
-        
         rotation = (-sin(dx * pi/2)) * ( -sin(cos(dx * pi/2)) + 1 ) * 90
 
         len_pagenum = len("%s" % prop['max_slides'])
@@ -111,7 +112,10 @@ def update_slides_pos():
                 for c in slide.childrenRecursive:
                     c.visible = True
             #slide.position = [ diff*4 + dx , -( 1 - fabs(diff) ) * 6 ,0 ]
-            faceup_len = ( 1 - fabs(dx) ) * -1.75 * cm
+            if (fabs(dx) >= 1.0):
+                faceup_len = fabs(diff) * 0.01 * cm
+            else:
+                faceup_len = ( 1 - fabs(dx) ) * -1.75 * cm
 #            if (dx < 1.0 and dx > -1.0):
             slide.position = [ (i * 0.1* cm ) + (1.75 * cm * dx) , faceup_len ,0 ]
 #            else :
