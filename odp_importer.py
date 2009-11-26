@@ -66,9 +66,12 @@ from tools.odf import text,presentation,draw,style,office
 
 global prog_options 
 
-def log_debug(line):
+def log_debug(lines):
     if prog_options.verbose:
-        print 'DEBUG:\t%s' % line
+        lines = str(lines)
+        lines = lines.split('\n')
+        for line in lines :
+            print 'DEBUG: %s' % line
 
 # TODO : put HTMLColorToRGB function into a tools.py file
 
@@ -84,16 +87,18 @@ def HTMLColorToRGB(colorstring):
 
 
 class ODP_Element:
+    level = 0
 
     def __init__(self) :
         self.namespace = 'element'
         self.name = self.namespace.upper()
-        self.triggers = {}
+        self.triggers = {'Text' : self.do_text}
         self.attr_transform = {}
         self.options = {}
-        self.tags_ignored = ''
+        self.tags_ignored = {}
         self.blender_objects = {}
         self.text = None
+        self.childs = {'internal' : [] , 'external' : [] }
 
     def parse_tree(self, element, level=0 , stop_level=0 , filter_tags = True):
 
@@ -105,28 +110,35 @@ class ODP_Element:
             method = self.triggers.get(element.tagName)
             if method : method(element = element)
         else :
-            self.tags_ignored += element.tagName + ' '
+            if (not self.tags_ignored.get('_triggers_') ) : self.tags_ignored['_triggers_'] = []
+            self.tags_ignored['_triggers_'].append(element.tagName)
 
         if element.childNodes:
             for child in element.childNodes:
                 self.parse_tree(child, level + 1 , stop_level , filter_tags)
-        else :
-            if (element.tagName == 'Text') :
-                log_debug("%s TEXT  :\"%s\"" % ('---+' * level , element) )
+#        else :
+#            if (element.tagName == 'Text') :
+#                self.text = str(element)
+#                log_debug("%s TEXT  :\"%s\"" % ('---+' * level , element) )
+
+    def do_text(self, element) :
+        if (self.text == None) : self.text = []
+        self.text.append("%s" % str(element))
 
     def do_attributes(self, element, level = 0 , set_options = True):
         indentation = ( '    ' * (level + 1) )
-        if (element != None) : log_debug("Doing attributes for element %s" % ( element.tagName) )
+#        if (element != None) : log_debug("Doing attributes for element %s" % ( element.tagName) )
         if element.attributes != None:
             #log_debug("Element %s has attributes!" % ( element.tagName ) )
             for attkey in element.attributes.keys():
                 attvalue = unicode(element.attributes[attkey]).encode('utf-8')
                 log_debug( "%s[attr %s=%s]" % ( indentation , attkey , attvalue) )
                 if (set_options) :
-                    if (attkey in self.attr_transform) : self.options[self.attr_transform[attkey]] = attvalue
+#                    if (attkey in self.attr_transform) : self.options[self.attr_transform[attkey]] = attvalue
+                    if (attkey in self.attr_transform) : self.options[attkey] = attvalue
                     else :
-                        if (not self.options.get('_useless_')) : self.options['_useless_'] = '' 
-                        self.options['_useless_'] += attkey + ' '
+                        if (not self.tags_ignored.get('_options_')) : self.tags_ignored['_options_'] = []
+                        self.tags_ignored['_options_'].append(attkey)
 
     def debug_attributes(self, element, level = 0 , set_options = False):
         self.do_attributes(element, level , set_options)
@@ -136,18 +148,25 @@ class ODP_Element:
 
     def apply(self, list , attribute_name) :
         noerror = True
-        att_name = self.namespace + ':' + attribute_name
+        #att_name = self.namespace + ':' + attribute_name
+        att_name = attribute_name
         if self.options.get(att_name) :
             att_value = self.options.get(att_name)
             element = None
-            if (list != None and list.get(att_value) ) :
+            if ( list != None and list.get(att_value) ) :
                 element = list.get(att_value)
-                self.options.update(element.options)
-                self.blender_objects.update(element.blender_objects)
+                self.childs['external'].extend([element])
+                #self.options.update(element.options)
+                #self.childs.extend(element.childs)
+                #self.blender_objects.update(element.blender_objects)
             else :
                 noerror = False
         else :
             noerror = False
+
+        for c in self.childs['internal'] :
+            if (not c.apply(list,attribute_name)) :
+                no_error = False
 
         return noerror
 
@@ -169,8 +188,31 @@ class ODP_Element:
 
         return blender_object
 
-    def __str__(self) :
-        return "%s %s" % (self.name , self.options)
+
+    def __str__( self ) :
+        indent = " " * 4 * ODP_Element.level
+        str = ""
+        str += "%s| %s\n" % (indent , self.name)
+        if ( len(self.tags_ignored) > 0) :
+            str += "%s|  Tags ignored :\n" % (indent)
+            for t_key in self.tags_ignored.keys():
+                str += "%s|  %s : %s\n" % ( indent , t_key , self.tags_ignored[t_key] )
+        str += "%s|  Attributes :\n" % (indent)
+        for o_key in self.options.keys():
+            str += "%s|  %s -> %s\n" % ( indent , o_key , self.options[o_key] )
+        if (self.text != None) :
+            str += '%s| TEXT = "%s"\n' % ( indent , self.text)
+        str += '%s| B.O. = "%s"\n' % ( indent , self.blender_objects)
+        str += "%s====\n" % (indent)
+
+        ODP_Element.level += 1
+        for child in self.childs['internal']:
+            str += "%s" % (child)
+        for child in self.childs['external']:
+            str += "%s" % (child)
+        ODP_Element.level -= 1
+
+        return str
 
 class BuildContext():
     
@@ -224,8 +266,6 @@ class BuildContext():
         self.blender['render'].enableGameFrameExpose()
 
         self.blender['slides'] = Blender.Object.Get('Slides')
-#        log_debug("SLIDES > %s" % (self.blender['slides'].properties.keys()) )
-#        log_debug("SLIDES > type %s" % ( type(self.blender['slides'].properties) ) )
 
     def create_blender_text(self,name, color):
         print "creating text %s with color %s" % (repr(name) , repr(color))
@@ -240,37 +280,20 @@ class BuildContext():
        # self.blender['text_material'] = b_material
        # self.blender['scene'].objects.unlink(self.blender['text_object'])
         
+class ODP_Text(ODP_Element):
+    def __init__(self, x_element):
+        ODP_Element.__init__(self) 
+        self.namespace = 'text'
+        self.name = self.namespace.upper()
+        self.data = None
 
-#    # Font loading
-#    def strip_fontconfig_family(self,family):
-#        # remove alt name
-#        n = family.find(',')
-#        if n > 0:
-#            family = family[:n]
-#        family = family.replace("\\-", "-")
-#        family = family.strip()
-#        return family
-#
-#    def load_fonts(self):
-#        cmd = "fc-list : file family style"
-#        for l in os.popen(cmd).readlines() :
-#            l = l.strip()
-#            if l.find(':') < 0:
-#                continue
-#            file, family , style = l.split(':')
-#            family = self.strip_fontconfig_family(family)
-#            style = style.split('=')[-1].split(',')[0]
-#            if style == 'Normal': style = 'Regular'
-##            print family , style
-#            if self.font_list.get(family,None) == None:
-#                self.font_list[family] = {}
-#            self.font_list[family][style]={'path':file}
-#
-#        for family,styles in self.font_list.iteritems():
-#            for style , file in styles.iteritems():
-#                blender_font = Text3d.Font.Load(file['path'])
-#                file['blender'] = blender_font
-#                #print file['blender']
+        global prog_options
+        verbose_tmp = prog_options.verbose
+        prog_options.verbose = False
+        self.parse_tree(x_element, 0,None)
+        log_debug('attributes %s' % (self.options) )
+        prog_options.verbose = verbose_tmp
+
 
 class ODP_TextList(ODP_Element):
     def __init__( self, x_element) :
@@ -278,50 +301,78 @@ class ODP_TextList(ODP_Element):
         self.namespace = 'text-list'
         self.name = self.namespace.upper()
         self.data = None
-#        self.options.update( {self.namespace + ':name' : ''} )
         
-        self.triggers = {
+        self.triggers.update({
             'text:list' : self.do_attributes,
-        }
+            'text:list-item' : self.do_textlistitem,
+        })
 
-        self.list = []
+        self.attr_transform = [
+            'text:style-name',
+        ]
 
         global prog_options
         verbose_tmp = prog_options.verbose
-        prog_options.verbose = True
-        self.parse_tree(x_element, 0,None)
+        prog_options.verbose = False
+        self.parse_tree(x_element, 0,1)
+        log_debug('attributes %s' % (self.options) )
+        prog_options.verbose = verbose_tmp
+
+    def do_textlistitem(self, element):
+        self.childs['internal'].append(ODP_TextListItem(element))
+
+class ODP_TextListItem(ODP_Element) :
+    def __init__(self , x_element):
+        ODP_Element.__init__(self)
+        self.namespace = 'text-list-item'
+        self.name = self.namespace.upper()
+        self.data = None
+        
+        self.triggers.update({
+            'text:p' : self.do_textp,
+            'text:list' : self.do_textlist,
+            'text:list-item' : self.do_attributes,
+        })
+
+        global prog_options
+        verbose_tmp = prog_options.verbose
+        prog_options.verbose = False
+        self.parse_tree(x_element, 0,1)
         log_debug('attributes %s' % (self.options) )
         prog_options.verbose = verbose_tmp
         
+    def do_textp(self, element):
+        self.childs['internal'].append( ODP_TextP(element) )
+
+    def do_textlist(self, element):
+        self.childs['internal'].append(ODP_TextList(element))
+
+#    def do_textlistitem(self, element):
+#        self.debug_attributes(element)
+#        self.childs.append(ODP_TextListItem(element))
 
 class ODP_TextSpan(ODP_Element):
     def __init__( self, x_element) :
         ODP_Element.__init__(self)
-        self.namespace = 'text-p'
+        self.namespace = 'text-span'
         self.name = self.namespace.upper()
         self.data = None
-#        self.options.update( {self.namespace + ':name' : ''} )
         
-        self.triggers = {
+        self.triggers.update({
             'text:span' : self.do_attributes,
-        }
+        })
 
-        self.list = []
+        self.attr_transform = [
+            'text:style-name',
+        ]
 
         global prog_options
         verbose_tmp = prog_options.verbose
-        prog_options.verbose = True
+        prog_options.verbose = False
         self.parse_tree(x_element, 0,1)
         log_debug('attributes %s' % (self.options) )
         prog_options.verbose = verbose_tmp
    
-    def __str__(self):
-        str = ""
-        str += "                    | %s\n" % self.name
-        if (self.text != None) :
-            str+="                   | %s\n" % (self.text)
-        str += "                    ===="
-        return str
 
 class ODP_TextP(ODP_Element):
     
@@ -330,37 +381,25 @@ class ODP_TextP(ODP_Element):
         self.namespace = 'text-p'
         self.name = self.namespace.upper()
         self.data = None
-#        self.options.update( {self.namespace + ':name' : ''} )
         
-        self.triggers = {
+        self.triggers.update({
             'text:p' : self.do_attributes,
             'text:span' : self.do_textspan,
-        }
-
-        self.list = []
+        })
 
         global prog_options
         verbose_tmp = prog_options.verbose
-        prog_options.verbose = True
+        prog_options.verbose = False
         self.parse_tree(x_element, 0,1)
         log_debug('attributes %s' % (self.options) )
         prog_options.verbose = verbose_tmp
 
     def do_textspan(self, element):
-        self.list.append( ODP_TextSpan(element) )
+        self.childs['internal'].append( ODP_TextSpan(element) )
 
     def build( self , build_context) :
         self.do_nothing()
 
-    def __str__( self ) :
-        str = ""
-
-        str+="                   |%s\n" % (self.name)
-        if (self.text != None) :
-            str+="                   | %s\n" % (self.text)
-        str+="                   =====\n"
-        
-        return str
 
 class ODP_TextBox(ODP_Element) :
     textbox_counter = 0
@@ -374,40 +413,32 @@ class ODP_TextBox(ODP_Element) :
         self.__class__.textbox_counter += 1
         self.options.update( {self.namespace + ':number' : self.__class__.textbox_counter} )
         
-        self.triggers = {
+        self.triggers.update({
             'draw:text-box' : self.do_attributes,
             'text:p' : self.do_textp,
             'text:list' : self.do_textlist,
-        }
-
-        self.texts = []
+        })
 
         global prog_options
         verbose_tmp = prog_options.verbose
-        prog_options.verbose = True
+        prog_options.verbose = False
         self.parse_tree(x_element, 0,1)
         log_debug('attributes %s' % (self.options) )
         prog_options.verbose = verbose_tmp
        
     def do_textp(self, element):
-        self.texts.append( ODP_TextP(element) )
+        self.childs['internal'].append( ODP_TextP(element) )
 
     def do_textlist(self, element):
-        self.texts.append( ODP_TextList(element) )
+        self.childs['internal'].append( ODP_TextList(element) )
  
     def build( self , build_context) :
         self.do_nothing()
 
-    def __str__( self ) :
-        str = ""
-        str += "             |TEXTBOX\n"
-        str += "             =====\n"
-        for text in self.texts :
-            str += "%s" % (text)
-        return str
 
 class ODP_Frame(ODP_Element) :
     frame_counter = 0    
+    maxchilds = 0
 
     def __init__(self,x_element) :
         ODP_Element.__init__(self)
@@ -415,55 +446,47 @@ class ODP_Frame(ODP_Element) :
         self.name = self.namespace.upper()
         self.data = None
 
-        self.frame_elements = []
+        self.attr_transform = [
+            'svg:x',
+            'svg:y',
+            'svg:width',
+            'svg:height',
+            'draw:layer',
+            'presentation:class',
+            'presentation:style-name',
+            'draw:id',
+            'presentation:user-transformed',
+        ]
 
-        self.attr_transform = {
-            'svg:x' : self.namespace + ':x',
-            'svg:y' : self.namespace + ':y',
-            'svg:width' : self.namespace + ':width',
-            'svg:height' : self.namespace + ':height',
-            'draw:layer' : self.namespace + ':layer',
-            'presentation:class' : self.namespace + ':pr-class',
-            'presentation:style-name' : self.namespace + ':pr-style',
-            'draw:id' : self.namespace + ':id',
-            'presentation:user-transformed' : self.namespace + 'user-transformed',
-            
-        }
-        self.triggers = {
+        self.triggers.update({
             'draw:frame' : self.do_attributes,
             'draw:text-box' : self.do_textbox,
             'draw:image' : self.do_image,
-        }
+        })
 
         self.__class__.frame_counter += 1
         self.options.update( {self.namespace + ':number' : self.__class__.frame_counter} )
         
         global prog_options
         verbose_tmp = prog_options.verbose
-        prog_options.verbose = True
+        prog_options.verbose = False
         self.parse_tree(x_element, 0,1)
         log_debug('attributes %s' % (self.options) )
         prog_options.verbose = verbose_tmp
 
+        if (len(self.childs['internal']) > self.__class__.maxchilds ) : self.__class__.maxchilds = len(self.childs['internal'])
+
     def do_textbox(self,element) :
-        self.frame_elements.append( ODP_TextBox(element) )
+        self.childs['internal'].append( ODP_TextBox(element) )
 
     def do_image(self,element):
-        self.do_nothing()
+        self.childs['internal'].append( ODP_Image(element) )
 
     def build(self, build_context):
-        for i in self.frame_elements:
+        for i in self.childs:
             i.build(build_context)
 
-    def __str__(self):
-        str=""
-        str+="         |FRAME \n"
-        str+="         =====\n"
 
-        for i in self.frame_elements :
-            str += "%s" % i
-
-        return str
 
 class ODP_Image(ODP_Element):
     image_counter = 0
@@ -475,17 +498,18 @@ class ODP_Image(ODP_Element):
         self.name = self.namespace.upper()
         self.data = None
 
-        self.attr_transform = {
-            'draw:name'     : self.namespace + ':name',
-            'xlink:href'    : self.namespace + ':href',
-            'xlink:show'    : self.namespace + ':show',
-            'xlink:type'    : self.namespace + ':type',
-        }
-        self.triggers = {
+        self.attr_transform = [
+            'draw:name',
+            'xlink:href',
+            'xlink:show',
+            'xlink:type',
+        ]
+
+        self.triggers.update({
             'draw:image' : self.do_attributes,
             'draw:fill-image' : self.do_attributes,
-            'text:p' : self.debug_attributes,
-        }
+            'text:p' : self.do_textp,
+        })
 
         self.__class__.image_counter += 1
         self.options.update({self.namespace + ':name' : ''})
@@ -497,21 +521,20 @@ class ODP_Image(ODP_Element):
         log_debug('attributes %s' % (self.options) )
         prog_options.verbose = verbose_tmp
 
-        if (self.options[self.namespace + ':name'] == '') : self.options.update( {self.namespace + ':name' : "Picture_%04d" % self.__class__.image_counter } )
+        if (self.options[self.namespace + ':name'] == '') : self.options.update( {self.namespace + ':name' : "Pict_%04d" % self.__class__.image_counter } )
 
+
+    def do_textp(self, element):
+        self.childs['internal'].append( ODP_TextP(element) )
 
     def apply_pictures(self , pictures = {}) :
         if (len(pictures)>0) :
-            picto =  pictures.get(self.get_options('href') )
+            picto =  pictures.get(self.options['xlink:href'] )
             if (picto) :
                 self.data = {}
-#                print type(picto) , len(picto)
                 self.data['file'] = picto[0]
-#                print 'file %s ' % self.data['file']
                 self.data['data'] = picto[1]
-#                print 'data %s ' % self.data['data'][0:20]
                 self.data['type'] = picto[2]
-#                print 'type %s ' % self.data['type'][0:20]
 
     def build(self, build_context):
         build_ok = True
@@ -521,14 +544,13 @@ class ODP_Image(ODP_Element):
             img = PIL.Image.open(img_io)
             ratio = (float(img.size[0]) / float(img.size[1]))
 
-#            #Resize the image if width or height are greater than 256
+            #Resize the image if width or height are greater than 256
             if (img.size[0] > 256 ):
                 img = img.resize((256 , int(256 / ratio)) , PIL.Image.BICUBIC)
             elif (img.size[1] > 256) :
                 img = img.resize((int(256 * ratio) , 256) , PIL.Image.BICUBIC)
 
             tmpfile = tempfile.NamedTemporaryFile(suffix="BSM.png",delete=False)
-#            print dir(tmpfile) , tmpfile.name
  
             #Save the final image temporary
             img.save(tmpfile , 'PNG')
@@ -541,7 +563,8 @@ class ODP_Image(ODP_Element):
             b_image.pack()
             #b_image.setFilename(self.get_options('name'))
 
-#            os.remove(tmpfile.name)
+            #Remove temporary image file
+            os.remove(tmpfile.name)
             
 
             log_debug("   PIL : name %s" % self.get_options('name') )
@@ -551,15 +574,12 @@ class ODP_Image(ODP_Element):
             log_debug("   PIL : ratio = %s " % (float(img.size[0]) / float(img.size[1])) )
             pil_data = img.getdata()
 
-#            for i in range(0,len(pil_data)):
-#                x = i % img.size[0]
-#                y = i / img.size[0]
-#                print blender_obj.getPixelI(x,y)
-
             b_texture = Blender.Texture.New(self.get_options('name'))
             b_texture.setImage(b_image)
             b_material = Blender.Material.New(self.get_options('name'))
             b_material.setTexture(0, b_texture , Blender.Texture.TexCo.UV , Blender.Texture.MapTo.COL)
+            if (img.mode == 'RGBA') :
+                b_material.mode |= Blender.Material.Modes.ZTRANSP
             blender_objects = {
                 self.namespace + ':material' : b_material,
                 self.namespace + ':texture' : b_texture,
@@ -569,22 +589,22 @@ class ODP_Image(ODP_Element):
         else : 
             build_ok = False
 
-        return build_ok        
+        return build_ok 
         
 
 class ODP_PresentationPageLayout(ODP_Element) :
     def __init__(self , x_element):
         ODP_Element.__init__(self)
-        self.namespace = 'presentationpagelayout'
+        self.namespace = 'presentation-page-layout'
         self.name = self.namespace.upper()
-        self.attr_transform = {
-        }
-        self.triggers = {
-            'style:presentation-page-layout' : self.debug_attributes,
-            'presentation:placeholder' : self.debug_attributes,
-        }
+        self.triggers.update({
+            'style:presentation-page-layout' : self.do_attributes,
+        })
 
-        self.options.update({self.namespace + ':name' : ''})
+        self.attr_transform = [
+            'style:name',
+        ]
+#        self.options.update({self.namespace + ':name' : ''})
         global prog_options
         verbose_tmp = prog_options.verbose
         prog_options.verbose = False
@@ -598,24 +618,176 @@ class ODP_Style(ODP_Element):
         
         self.namespace = 'style'
         self.name = self.namespace.upper()
-        self.attr_transform = {
-            'style:name' : self.namespace+':name',
-            'style:family' : self.namespace + ':family',
-            'draw:fill-image-name' : self.namespace + ':fillimage',
-        }
-        self.triggers = {
+        self.attr_transform = [
+            'style:name',
+            'style:family',
+            'style:parent-style-name',
+        ]
+
+        self.drawing_page_properties = None
+        self.graphic_properties = None
+        self.text_properties = None
+        self.paragraph_properties = None
+
+        self.triggers.update({
             'style:style' : self.do_attributes,
-            'style:drawing-page-properties' : self.do_attributes,
-            #'style:graphic-properties' : self.do_attributes,
-        }
+            'style:drawing-page-properties' : self.do_drawing_page_properties,
+            'style:graphic-properties' : self.do_graphic_properties,
+            'style:text-properties' : self.do_text_properties,
+            'style:paragraph-properties' : self.do_paragraph_properties,
+        })
         self.options.update({self.namespace + ':name' : ''} )
         global prog_options
         verbose_tmp = prog_options.verbose
         prog_options.verbose = False
-        self.parse_tree(x_element, 0,None)
+        self.parse_tree(x_element, 0,1)
         log_debug('attributes %s' % (self.options) )
         prog_options.verbose = verbose_tmp
 
+    def do_paragraph_properties(self, element):
+        self.childs['internal'].append( ODP_ParagraphProperties(element) )
+
+    def do_drawing_page_properties(self, element):
+        self.childs['internal'].append( ODP_DrawingPageProperties(element) )
+
+    def do_graphic_properties(self, element):
+        self.childs['internal'].append( ODP_GraphicProperties(element) )
+
+    def do_text_properties(self, element):
+        self.childs['internal'].append( ODP_TextProperties(element) )
+
+    def merge_style( self, style_list) :
+        parent_style_name = self.options.get('style:parent-style-name')
+        if (parent_style_name ):
+            parent_style = style_list.get(parent_style_name)
+            if (parent_style) :
+                for parent_prop in parent_style.childs['internal'] :
+                    update = False
+                    for prop in self.childs['internal'] :
+                        if prop.namespace == parent_prop.namespace :
+                            update = True
+                            new_options = {}
+                            new_options.update(parent_prop.options)
+                            new_options.update(prop.options)
+                            prop.options = new_options
+
+                    if update == False :
+                        self.childs['internal'].append(parent_prop)
+                        
+
+class ODP_ParagraphProperties( ODP_Element ):
+    def __init__(self, x_element):
+        ODP_Element.__init__(self)
+        self.namespace = 'paragraph-properties'
+        self.name = self.namespace.upper()
+        self.triggers.update({
+            'style:paragraph-properties' : self.do_attributes,
+        })
+
+        self.attr_transform = [
+            'fo:margin-top',
+            'fo:margin-right',
+            'fo:margin-bottom', 
+            'fo:margin-left',
+            'fo:text-indent',
+        ]
+
+        global prog_options
+        verbose_tmp = prog_options.verbose
+        prog_options.verbose = False
+
+        self.parse_tree(x_element,0,1)
+        log_debug('attributes %s' % (self.options) )
+        prog_options.verbose = verbose_tmp
+
+class ODP_GraphicProperties(ODP_Element):
+    def __init__(self, x_element):
+        ODP_Element.__init__(self)
+        self.namespace = 'graphic-properties'
+        self.name = self.namespace.upper()
+
+        self.triggers.update({
+            'style:graphic-properties' : self.do_attributes,
+        })
+
+
+        self.attr_transform = [
+            'draw:fill-image-name',
+            'style:repeat',
+            'draw:fill-image-width',
+            'draw:fill-image-height',
+            'draw:fill',
+            'draw:background-size',
+        ]
+        global prog_options
+        verbose_tmp = prog_options.verbose
+        prog_options.verbose = False
+
+        self.parse_tree(x_element,0,1)
+        log_debug('attributes %s' % (self.options) )
+        prog_options.verbose = verbose_tmp
+
+class ODP_TextProperties(ODP_Element):
+    def __init__(self, x_element):
+        ODP_Element.__init__(self)
+        self.namespace = 'text-properties'
+        self.name = self.namespace.upper()
+
+        self.triggers.update({
+            'style:text-properties' : self.do_attributes,
+        })
+
+        self.attr_transform = [
+            'fo:font-family',
+            'fo:font-weight',
+            'fo:font-style',
+            'fo:font-size',
+            'style:font-weight-complex',
+            'style:font-family-generic',
+            'style:text-underline-style',
+            'style:text-underline-color',
+            'style:text-underline-width',
+            'style:use-window-font-color',
+            'fo:text-shadow',
+            'style:font-relief',
+        ]
+
+        global prog_options
+        verbose_tmp = prog_options.verbose
+        prog_options.verbose = False
+
+        self.parse_tree(x_element,0,1)
+        log_debug('attributes %s' % (self.options) )
+        prog_options.verbose = verbose_tmp
+        
+
+class ODP_DrawingPageProperties(ODP_Element) :
+
+    def __init__(self, x_element):
+        ODP_Element.__init__(self)
+
+        self.namespace = 'drawing-page-properties'
+        self.name = self.namespace.upper()
+
+        self.triggers.update({
+            'style:drawing-page-properties' : self.do_attributes,
+        })
+        self.attr_transform = [
+            'draw:fill-image-name',
+            'style:repeat',
+            'draw:fill-image-width',
+            'draw:fill-image-height',
+            'draw:fill',
+            'draw:background-size',
+        ]
+
+        global prog_options
+        verbose_tmp = prog_options.verbose
+        prog_options.verbose = False
+
+        self.parse_tree(x_element,0,1)
+        log_debug('attributes %s' % (self.options) )
+        prog_options.verbose = verbose_tmp
 
 class ODP_MasterPage(ODP_Element) :
     def __init__(self, x_element) :
@@ -623,21 +795,20 @@ class ODP_MasterPage(ODP_Element) :
 
         self.namespace = 'masterpage'
         self.name = self.namespace.upper()
-        self.attr_transform = {
-            'style:name'                : self.namespace + ':name',
-            'style:page-layout-name'    : self.namespace + ':pagelayout',
-            'draw:style-name'           : self.namespace + ':style',
-        }
-        self.triggers = {
+        self.attr_transform = [
+            'style:name',
+            'style:page-layout-name',
+            'draw:style-name',
+        ]
+        self.triggers.update({
             'style:master-page' : self.do_attributes,
-            'draw:frame' : self.debug_attributes,
-        }
+        })
 
         global prog_options
         verbose_tmp = prog_options.verbose
         prog_options.verbose = False
 
-        self.parse_tree(x_element,0,0)
+        self.parse_tree(x_element,0,1)
         log_debug('attributes %s' % (self.options) )
         prog_options.verbose = verbose_tmp
 
@@ -648,28 +819,48 @@ class ODP_PageLayout(ODP_Element) :
         ODP_Element.__init__(self)
         self.namespace = 'pagelayout'
         self.name = self.namespace.upper()
-        self.attr_transform = {
-            'style:name'                : self.namespace + ':name',
-            'fo:margin-top'             : self.namespace + ':margin-top',
-            'fo:margin-left'            : self.namespace + ':margin-left',
-            'fo:margin-bottom'          : self.namespace + ':margin-bottom',
-            'fo:margin-right'           : self.namespace + ':margin-right',
-            'fo:page-width'             : self.namespace + ':width',
-            'fo:page-height'            : self.namespace + ':height',
-            'style:print-orientation'   : self.namespace + ':orientation',
-        }
+        self.attr_transform = [
+            'style:name',
+            'fo:margin-top',
+            'fo:margin-left',
+            'fo:margin-bottom',
+            'fo:margin-right',
+            'fo:page-width',
+            'fo:page-height',
+            'style:print-orientation',
+        ]
 
-        self.triggers = {
+        self.triggers.update({
             'style:page-layout-properties' : self.do_attributes,
             'style:page-layout' : self.do_attributes,
-        }
+        })
         global prog_options
         verbose_tmp = prog_options.verbose
         prog_options.verbose = False
         self.parse_tree(x_element,0,1)
         log_debug('attributes %s' % (self.options) )
         prog_options.verbose = verbose_tmp
-        
+
+    def do_page_layout_properties(self , element) :
+        self.childs['internal'].append( ODP_PageLayoutProperties(element) )
+
+class ODP_PageLayoutProperties( ODP_Element ) :
+    def __init__(self, x_element) :
+        ODP_Element.__init__(self)
+        self.namespace = 'page-layout-properties'
+        self.name = self.namespace.upper()
+        self.attr_transform = [
+        ]
+
+        self.triggers.update({
+            'style:page-layout-properties' : self.do_attributes,
+        })
+        global prog_options
+        verbose_tmp = prog_options.verbose
+        prog_options.verbose = False
+        self.parse_tree(x_element,0,1)
+        log_debug('attributes %s' % (self.options) )
+        prog_options.verbose = verbose_tmp
 
 class ODP_Page(ODP_Element) :
 
@@ -679,23 +870,22 @@ class ODP_Page(ODP_Element) :
         ODP_Element.__init__(self)
         self.namespace = 'page'
         self.name = self.namespace.upper()
-        self.attr_transform = {
-            'draw:name' : self.namespace + ':name',
-            'presentation:use-footer-name' : self.namespace + ':usefooter',
-            'presentation:use-date-time-name' : self.namespace + ':usedatetime',
-#            'presentation:presentation-page-layout-name' : 'page:presentationpagelayout',
-            'draw:master-page-name' : self.namespace + ':masterpage',
-            'draw:style-name' : self.namespace + ':style',
-        }
+        self.attr_transform = [
+            'draw:name',
+            'presentation:use-footer-name',
+            'presentation:use-date-time-name',
+            'presentation:presentation-page-layout-name',
+            'draw:master-page-name',
+            'draw:style-name',
+        ]
         self.__class__.page_counter+=1
-        self.frames = []
 
         self.options.update( { self.namespace + ':number' : self.page_counter } )
 
-        self.triggers = {
+        self.triggers.update({
             'draw:page' : self.do_attributes,
             'draw:frame' : self.do_frame,
-        }
+        })
         
         global prog_options
         verbose_tmp = prog_options.verbose
@@ -705,11 +895,9 @@ class ODP_Page(ODP_Element) :
         prog_options.verbose = verbose_tmp
 
     def do_frame(self,element):
-        self.frames.append( ODP_Frame(element) )
-#        self.do_nothing()
+        self.childs['internal'].append( ODP_Frame(element) )
 
     def build( self , build_context) :
-
         b_scene = build_context.blender['scene']
         
         i_current_page_number = self.get_options('number')
@@ -721,13 +909,13 @@ class ODP_Page(ODP_Element) :
             'y':1 * ( i_current_page_number ) , 
             'z':0 
         }
-        ratio_x = float( self.get_options('width' , 'pagelayout').replace('cm','') )
-        ratio_y = float( self.get_options('height' , 'pagelayout').replace('cm',''))
+        
+        ratio_x = float( self.options['fo:page-width'].replace('cm','') )
+        ratio_y = float( self.options['fo:page-height'].replace('cm','') )
         coord = [ [ratio_x/2,0,ratio_y/2] , [ratio_x/2,0,-ratio_y/2] , [-ratio_x/2,0,-ratio_y/2] , [-ratio_x/2 , 0 , ratio_y/2] ]
         faces = [ [ 3 , 2 , 1 , 0] ]
 
         me = bpy.data.meshes.new(i_name)
-        #print me
 
         me.verts.extend(coord)
         me.faces.extend(faces)
@@ -740,32 +928,14 @@ class ODP_Page(ODP_Element) :
 
         b_page = build_context.blender['scene'].objects.new(me)
 
-        
-
-        #build_context.create_blender_page(build_context.doc['page_size']['width'] , build_context.doc['page_size']['height'],i_name , self.bg_data, self.bg_name)
-        #b_page = build_context.blender['page']
-
         b_page.setLocation( i_position['x'] , i_position['y'] , i_position['z'] )
         b_page.makeDisplayList() 
         
         build_context.blender['slides'].makeParent([b_page],0,0)
-        #build_context.blender['current_page_obj'] = b_page
 
-        for i_frame in self.frames :
-            i_frame.build(build_context)
+        for frame in self.childs['internal']:
+            frame.build(build_context)
 
-    def __str__( self ) :
-        str = ""
-        str += "\t|PAGE\n"
-        for o_key in self.options.keys():
-            str += "\t| %-15s -> %s\n" % (o_key , self.options[o_key])
-        str += "\t=====\n"
-        for frame in self.frames :
-            str += "%s" % (frame)
-        return str
-
-
-        
 
 class ODP_Presentation(ODP_Element) :
     
@@ -774,22 +944,6 @@ class ODP_Presentation(ODP_Element) :
         self.namespace = 'presentation'
         self.name = self.namespace.upper()
         
-        self.triggers = {
-            'presentation:footer-decl'          : self.do_footer,
-            'presentation:date-time-decl'       : self.do_datetime,
-            'presentation:settings'             : self.do_settings,
-        }
-
-        self.pages = []
-        self.page_current_number = 0
-        
-        self.footer = {}
-        self.datetime = {}
-        self.styles = {}
-
-#        for i in x_document.Pictures.keys() :
-#            print i
-
         self.fillimages = {}
         for i in x_document.getElementsByType(draw.FillImage):
             img = ODP_Image(i)
@@ -797,7 +951,7 @@ class ODP_Presentation(ODP_Element) :
             if (img.build(build_context)) :
                 log_debug(img.blender_objects)
             log_debug(img)
-            self.fillimages[img.options['image:name']] = img 
+            self.fillimages[img.options['draw:name']] = img 
 
         self.images = {}
         for i in x_document.getElementsByType(draw.Image):
@@ -808,85 +962,62 @@ class ODP_Presentation(ODP_Element) :
             log_debug(img)
             self.images[img.options['image:name']] = img 
 
-        self.presentationpagelayouts = {}
-        for i in x_document.getElementsByType(style.PresentationPageLayout) :
-            ppl = ODP_PresentationPageLayout(i)
-            self.presentationpagelayouts[ppl.options['presentationpagelayout:name']] = ppl
+#        self.presentationpagelayouts = {}
+#        for i in x_document.getElementsByType(style.PresentationPageLayout) :
+#            ppl = ODP_PresentationPageLayout(i)
+#            log_debug(ppl)
+#            self.presentationpagelayouts[ppl.options['style:name']] = ppl
 
         self.styles = {}
         for i in x_document.getElementsByType(style.Style):
             s = ODP_Style(i)
-            if (s.apply(self.fillimages , 'fillimage')) :
-                log_debug(s)
+            s.apply(self.fillimages , 'draw:fill-image-name')
+            #log_debug(s)
             self.styles[s.options['style:name']] = s
+
+        for i in self.styles.keys() :
+            #print "PLOP" , i,type(i),type(self.styles[i])
+            self.styles[i].merge_style(self.styles)
+            log_debug(self.styles[i])
 
         self.pagelayouts = {} 
         for i in x_document.getElementsByType(style.PageLayout) :
             pl = ODP_PageLayout(i)
-            self.pagelayouts[pl.options['pagelayout:name']] = pl
+            log_debug(pl)
+            self.pagelayouts[pl.options['style:name']] = pl
 
         self.masterpages = {}
         for i in x_document.getElementsByType(style.MasterPage) :
             mp = ODP_MasterPage(i)
-            if mp.apply(self.pagelayouts, 'pagelayout') and mp.apply(self.styles , 'style') :
-                log_debug(mp)
-            self.masterpages[mp.options['masterpage:name']] = mp
-        
+            mp.apply(self.pagelayouts, 'style:page-layout-name')
+            mp.apply(self.styles , 'draw:style-name')
+            log_debug(mp)
+            self.masterpages[mp.options['style:name']] = mp
 
         self.pages = []
-        
         for i in x_document.getElementsByType(draw.Page):
             p = ODP_Page(i)
-            if p.apply(self.masterpages , 'masterpage') :
-                log_debug(p)
+            p.apply(self.masterpages , 'draw:master-page-name')
+            log_debug(p)
             self.pages.append(p)
 
         build_context.images = self.images
-        
-    def do_page(self, element):
-        options = {'page:number':self.page_current_number}
-        args = {'x_options' : options, 'x_styles' : self.styles}
-        self.pages.append( ODP_Page(element,**args ) )
-        self.page_current_number += 1
 
-    def do_datetime(self, element):
-        self.do_nothing()
-
-    def do_footer(self,element):
-
-        log_debug('doing a FOOTER element')
-        if element.attributes != None:
-            for attkey in element.attributes.keys():
-                log_debug('\t' + str(attkey) + '=' + unicode(element.attributes[attkey]).encode('utf-8'))
-        if element.childNodes:
-            for e in element.childNodes:
-                log_debug('\tFooter element : %s' % (e.tagName))
-                if (e.tagName == 'Text') : log_debug('\t\tFooter Text : %s' % (e))
-
-    def do_settings(self, element):
-        log_debug('doing a SETTINGS element')
-
-        if element.attributes != None:
-            for attkey in element.attributes.keys():
-                log_debug('\t' + str(attkey) + '=' + unicode(element.attributes[attkey]).encode('utf-8'))
-        
+#        log_debug('MAXIMUM CHILDS PER FRAME : %d' % ( ODP_Frame.maxchilds ) )
 
     def build( self , build_context ) :
 
         for i_page in self.pages :
             i_page.build(build_context)
 
-
     def __str__(self):
         str = ""
         str += "|PRESENTATION\n"
         str += "=====\n"
+
         for p in self.pages:
             str += "%s\n" % p
         return str
-
-
-
 
 
 

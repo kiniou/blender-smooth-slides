@@ -116,6 +116,7 @@ def update_slides_pos():
                 faceup_len = fabs(diff) * 0.01 * cm
             else:
                 faceup_len = ( 1 - fabs(dx) ) * -1.75 * cm
+
 #            if (dx < 1.0 and dx > -1.0):
             slide.position = [ (i * 0.1* cm ) + (1.75 * cm * dx) , faceup_len ,0 ]
 #            else :
