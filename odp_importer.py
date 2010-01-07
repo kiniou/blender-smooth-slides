@@ -525,28 +525,32 @@ class ODP_Frame(ODP_Element) :
             i.uv = uv
 
         #Build Frame Blender Texture
-#        fontdesc = pango.FontDescription("Liberation Sans 10")
-#        image_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, int(frame_width * cm), int(frame_height * cm) )
-#        
-#        cairo_context = cairo.Context(image_surface)
-#        cairo_context.rectangle(0,0,frame_width,frame_height)
+        fontdesc = pango.FontDescription("Liberation Sans 30")
+        image_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, int(frame_width * cm), int(frame_height * cm) )
+        
+        cairo_context = cairo.Context(image_surface)
+
+#        cairo_context.rectangle(0,0,int(frame_width*cm),int(frame_height*cm))
 #        cairo_context.set_source_rgb(1,0,0)
 #        cairo_context.fill()
-#
-#        cairo_context.set_source_rgb(0,0,0)
-#        pangocairo_context = pangocairo.CairoContext(cairo_context)
-#        pangocairo_layout = pangocairo_context.create_layout()
-#        pangocairo_layout.set_font_description(fontdesc)
-#        pangocairo_layout.set_markup(" FRAME TEST ")
-#
+
+#        cairo_context.move_to(0,0)
+        cairo_context.set_source_rgb(0,0,0)
+        pangocairo_context = pangocairo.CairoContext(cairo_context)
+        pangocairo_layout = pangocairo_context.create_layout()
+        pangocairo_layout.set_font_description(fontdesc)
+        pangocairo_layout.set_markup("<span>FRAME TEST ESSAI ESSAI ESSAI</span>")
+
 #        pangocairo_layout.set_wrap(pango.WRAP_WORD) 
-#        pangocairo_layout.set_width(frame_width) 
-#        pangocairo_context.show_layout(pangocairo_layout)
-#        cairo_context.show_page() 
-#        
-#        img_buf = StringIO.StringIO()
+        pangocairo_layout.set_width(int(frame_width*cm)) 
+        pangocairo_context.update_layout(pangocairo_layout)
+        print "PLOP" , pangocairo_layout.get_width() , pangocairo_layout.get_size()
+        pangocairo_context.show_layout(pangocairo_layout)
+        cairo_context.show_page() 
+        
+        img_buf = StringIO.StringIO()
 #        image_surface.write_to_png(img_buf)
-#        image_surface.write_to_png("test.png")
+        image_surface.write_to_png("test.png")
 #        for i in img_buf : print i
 #        ODP_Image.build_material( data=img_buf, name=i_name )
         
