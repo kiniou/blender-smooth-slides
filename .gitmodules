@@ -1,0 +1,3 @@
+[submodule "tools/lpod"]
+	path = tools/lpod
+	url = git@github.com:kiniou/lpOD.git
