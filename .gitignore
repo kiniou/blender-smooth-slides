@@ -1,3 +1,5 @@
 *.pyc
 *.swp
 *.blend[0-9]*
+tests/*.blend*
+tests/*.png
