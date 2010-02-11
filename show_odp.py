@@ -3,6 +3,7 @@
 
 from optparse import OptionParser
 from sys import exit, stdout
+from pprint import pprint, pformat
 
 # Import from lpod
 from tools.lpod.document import odf_document, odf_get_document
@@ -12,8 +13,10 @@ from tools.lpod.frame import odf_frame
 from tools.lpod.draw_page import odf_draw_page
 from tools.lpod.list import odf_list
 from tools.lpod.element import odf_element, register_element_class
-__version__ = "0.1"
 
+
+__version__ = "0.1"
+__elm_debug__ = False
 
 def test_document(document) :
 	content = document.get_body()
@@ -42,7 +45,7 @@ def test_document(document) :
 def debug_level(element,inc_lvl,context):
 		context['level'] += inc_lvl
 		lvl = context['level']
-		if (inc_lvl > 0) :
+		if (inc_lvl > 0 and __elm_debug__) :
 			print "\t" * lvl + element.get_tagname()
 	
 
@@ -54,7 +57,13 @@ class my_document (odf_document) :
 			raise NotImplementedError, ('Type of document "%s" not supported yet' % type)
 
 		body = self.get_body()
-		context = {'document': self , 'level' : 0 }
+		styles = self.get_styles()
+#		styles.append(self.get_content().get_style_list() )
+		print self.get_content().serialize(True)
+		print styles.serialize(True)
+#		for i in styles.get_style_list(automatic=True) : print pformat(i.get_attribute("style:name")), i._odf_element__element.getparent()
+#		print dir(i._odf_element__element)
+		context = {'document': self , 'styles' : styles , 'level' : 0 }
 		result = []
 		for element in body.get_children():
 			if (element.get_tagname() in ["draw:page"]) :
@@ -66,9 +75,19 @@ class my_page(odf_draw_page):
 		debug_level(self,1,context)
 
 		page_name = self.get_page_name()
-		page = {page_name : []}
+		page = {page_name : {}}
+		style_name = self.get_attribute("draw:style-name")
+		master_page = self.get_attribute("draw:master-page-name")
+		style_mp = context['styles'].get_style("master-page",name_or_element=master_page)
+		style = context['styles'].get_style("drawing-page",name_or_element=style_name)
+
+		pprint(style_mp.get_attributes())
+		pprint(style.get_attributes())
+		
 		for element in self.get_children():
-			page[page_name].append(element.get_formatted_text(context) )
+			type = element.get_tagname()
+			if(type not in page[page_name]) : page[page_name][type] = []
+			page[page_name][type].append(element.get_formatted_text(context))
 
 		debug_level(self,-1,context)
 		return page
@@ -152,6 +171,5 @@ if __name__ == "__main__" :
 	document = my_document(container)
 	
 	result = document.get_formatted_text()
-	for r in result:
-		print r
+#	for r in result: pprint(r)
 	
