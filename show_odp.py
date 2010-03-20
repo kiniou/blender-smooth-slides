@@ -78,11 +78,16 @@ class my_page(odf_draw_page):
 		page = {page_name : {}}
 		style_name = self.get_attribute("draw:style-name")
 		master_page = self.get_attribute("draw:master-page-name")
-		style_mp = context['styles'].get_style("master-page",name_or_element=master_page)
-		style = context['styles'].get_style("drawing-page",name_or_element=style_name)
+		print page_name, master_page , style_name
 
-		pprint(style_mp.get_attributes())
-		pprint(style.get_attributes())
+		style_mp = context['styles'].get_style("master-page",name_or_element=master_page)
+		style = context['styles'].get_style("drawing-page",name_or_element='M'+style_name)
+
+#		print dir(style_mp) , pformat(style_mp.get_attributes())
+		print pformat(style.get_attributes())
+
+#		print dir(self)
+#		print "TEST PAGE" + pformat(self.get_styled_elements())
 		
 		for element in self.get_children():
 			type = element.get_tagname()
@@ -171,5 +176,9 @@ if __name__ == "__main__" :
 	document = my_document(container)
 	
 	result = document.get_formatted_text()
-#	for r in result: pprint(r)
+	for r in result: pprint(r)
+
+#	elements = document.get_styled_elements()
+#	for e in elements:
+#		print e.get_tagname()
 	
