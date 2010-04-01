@@ -3,3 +3,4 @@
 *.blend[0-9]*
 tests/*.blend*
 tests/*.png
+tests/test_cairo/*.png
