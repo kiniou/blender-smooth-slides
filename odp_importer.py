@@ -53,7 +53,6 @@ from PIL import ImageFont,ImageFile,ImageDraw,Image
 
 import StringIO
 
-import gtk
 import pango
 import cairo
 import pangocairo
@@ -539,24 +538,27 @@ class ODP_Frame(ODP_Element) :
 		pangocairo_context = pangocairo.CairoContext(cairo_context)
 		pangocairo_layout = pangocairo_context.create_layout()
 		pangocairo_layout.set_font_description(fontdesc)
-		pangocairo_layout.set_markup("<span>FRAME TEST ESSAI ESSAI ESSAI</span>")
+		pangocairo_layout.set_markup("<span>FRAME TEST \nESSAI ESSAI ESSAI</span>")
 
 #		pangocairo_layout.set_wrap(pango.WRAP_WORD) 
-		pangocairo_layout.set_width(int(frame_width*cm)) 
-		pangocairo_context.update_layout(pangocairo_layout)
-#		print "PLOP" , pangocairo_layout.get_width() , pangocairo_layout.get_size()
+#		pangocairo_layout.set_width(int(frame_width*cm)) 
+#		pangocairo_context.update_layout(pangocairo_layout)
+		print "PLOP" , pangocairo_layout.get_width() , pangocairo_layout.get_size()
+		pangocairo_context.show_layout(pangocairo_layout)
 		pangocairo_context.show_layout(pangocairo_layout)
 		cairo_context.show_page() 
 		
 		img_buf = StringIO.StringIO()
-#		image_surface.write_to_png(img_buf)
-		image_surface.write_to_png("/home/kiniou/Projects/blender/scripts/blender-smooth-slides/test_cairo/%s.png" %(i_name))
+		image_surface.write_to_png(img_buf)
+		img_buf.seek(0)
+		image_surface.write_to_png("./tests/test_cairo/%s.png" %(i_name))
 #		for i in img_buf : print i
-#		ODP_Image.build_material( data=img_buf, name=i_name )
+		ODP_Image.build_material( data=img_buf, name=i_name )
 		
 
-		#for i in self.childs:
-		#	i.build(build_context)
+		for i in self.childs:
+			#i.build(build_context)
+			print "FRAME_CHILD", dir(i)
 
 
 
@@ -620,7 +622,7 @@ class ODP_Image(ODP_Element):
 
 	@staticmethod 
 	def build_material( data , name ) :
-		log_debug(' > Building image "%s"' % name)
+		log_debug(' > Building image "%s" %s' % (name , data))
 #		img_io = StringIO.StringIO(data)
 #		print img_io, img_io.len
 		img = PIL.Image.open(data)
