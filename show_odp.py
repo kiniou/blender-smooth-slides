@@ -142,9 +142,9 @@ def _get_style_properties(element,context,prop_name):
 
 #	pprint(style_prop)
 
-	return style_prop
+	return _get_text_style(style_prop)
 
-#def _get_style_list()
+def _get_style_list(level)
 
 
 
@@ -155,6 +155,17 @@ def _get_pango_span ( text_prop):
 	font_weight=  text_prop['fo:font-weight']
 	return ( u'<span face="%s" size="%s" style="%s" weight="%s">' % ( font_family,font_size,font_style, font_weight ) )
 
+def _get_text_style ( text_prop):
+	style = {}
+	style['font-family'] = text_prop['fo:font-family'].strip("'")
+	style['font-size']   = text_prop['fo:font-size'].rstrip('pt')
+	style['font-style']  = text_prop['fo:font-style']
+	style['font-weight'] = text_prop['fo:font-weight']
+	style['text-outline'] = True if text_prop['style:text-outline'] == 'true' else False
+	return style
+
+def _get_paragraph_style(paragraph_prop):
+	return None
 
 def _get_text_children(element):
 	return element.xpath('*|text()')
@@ -285,13 +296,14 @@ class my_image(odf_element):
 class my_paragraph(odf_paragraph):
 	def get_formatted_text(self, context):
 		debug_level(self,-1,context)
-
 		for children in _get_text_children(self) :
 			if type(children) is not odf_text:
 				children.get_formatted_text(context)
 			else:
-				print "TEXT '%s' = '%s' : %s" % (self.get_tagname(),children.get_parent().get_tagname(),children)
-				print "DEBUG PARENT" , children.xpath('parent').get_tagname()
+				print "MYPARAGRAPH '%-20s' : %s" % (self.get_tagname(),children) 
+				text_prop = _get_style_properties(self,context , 'text')
+				print pformat(text_prop)
+#				print "DEBUG PARENT" , children.xpath('parent').get_tagname()
 
 		debug_level(self,1,context)
 
@@ -302,8 +314,9 @@ class my_span(odf_span):
 			if type(children) is not odf_text:
 				children.get_formatted_text(context)
 			else :
-				print "TEXT '%s' = '%s' : %s" % (self.get_tagname(),children.get_parent().get_tagname(),children)
-#		_get_pango_text(self,context)
+				print "MYSPAN '%-20s' : %s" % (self.get_tagname(),children)
+				text_prop = _get_style_properties(self,context , 'text')
+				print pformat(text_prop)
 
 		debug_level(self,1,context)
 		
@@ -312,13 +325,13 @@ class my_list(odf_list):
 	def get_formatted_text(self, context):
 		debug_level(self,-1,context)
 		context['list-level'] += 1
-		text_prop = _get_style_properties(self, context, 'list')
-		pprint(text_prop)
+#		text_prop = _get_style_properties(self, context, 'list')
+#		pprint(text_prop)
 		for children in _get_text_children(self) :
 			if type(children) is not odf_text:
 				children.get_formatted_text(context)
 			else :
-				print "TEXT '%s' = '%s' : %s" % (self.get_tagname(),children.get_parent().get_tagname(),children)
+				print "TEXT '%-20s' : %s" % (self.get_tagname(),children)
 		context['list-level'] -= 1
 		debug_level(self,1,context)
 
@@ -329,7 +342,7 @@ class my_list_item(odf_element):
 			if type(children) is not odf_text:
 				children.get_formatted_text(context)
 			else :
-				print "TEXT '%s' = '%s' : %s" % (self.get_tagname(),children.get_parent().get_tagname(),children)
+				print "TEXT '-%20s' : %s" % (self.get_tagname(),children)
 		debug_level(self,1,context)
 		
 register_element_class('text:p', my_paragraph)
