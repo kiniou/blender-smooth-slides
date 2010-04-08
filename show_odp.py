@@ -1,14 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 
+import sys
+import os , os.path
+sys.path.append(os.path.dirname(os.path.realpath( __file__ )))
+
+# Python imports
 from optparse import OptionParser
 from sys import exit, stdout
 from pprint import pprint, pformat
-import os.path
 import re
 import math
+import tempfile
+import StringIO
 
-# Import from lpod
+# lpod imports
 from tools.lpod.document import odf_document, odf_get_document
 from tools.lpod.container import odf_container , odf_get_container
 from tools.lpod.paragraph import odf_paragraph
@@ -20,17 +26,42 @@ from tools.lpod.element import odf_element, register_element_class, odf_text
 from tools.lpod.style import odf_style
 from tools.lpod.utils import _get_element_list , _get_element
 
-# Import pango/cairo
-import pango
-import cairo
-import pangocairo
+_third_party_modules = True
+
+# pango/cairo imports
+try:
+	import pango
+	import cairo
+	import pangocairo
+except:
+	print "ERROR : pygtk modules are not installed"
+	_third_party_modules = False
+
+# PIL imports
+try:
+	import PIL
+	from PIL import ImageFont,ImageFile,ImageDraw,Image
+except:
+	print "ERROR : Python Imaging Library is not installed"
+
+# blender imports
+try:
+	import Blender
+	from Blender import Text3d, Mesh, Camera, Mathutils,sys as bsys , Material , Texture , Image as BImage
+	import bpy
+except:
+	print "ERROR : You must run this script along with Blender"
+	_third_party_modules = False
+
+if not _third_party_modules :
+	exit()
 
 __version__ = "0.1"
 __elm_debug__ = False
 
 
 text_i = 0
-dpi = 96.0
+dpi = 72.0
 cm = dpi / 2.54
 
 def debug_level(element,inc_lvl,context):
@@ -54,7 +85,16 @@ def _get_pango_span ( text_prop):
 	return ( u'<span face="%s" size="%s" style="%s" weight="%s" underline="%s">' % ( font_family,font_size,font_style, font_weight , font_underline) )
 
 def _create_frame_image(width,height,image):
-	pass
+	global text_i
+
+	image_buffer = StringIO.StringIO()
+	pprint(image[0:50])
+	image_buffer.write(image)
+	image_buffer.flush()
+	image_buffer.seek(0)
+	result = {'name' : "FRAME_%04d" % text_i , 'buffer' : image_buffer}
+	text_i += 1
+	return result
 
 def _draw_rectangle(rect , col , cr):
 			cr.rel_line_to(rect[2],0)
@@ -66,9 +106,9 @@ def _draw_rectangle(rect , col , cr):
 			cr.fill_preserve()
 			cr.set_source_rgba(col[0],col[1],col[2],1.0)
 			cr.stroke()
+
 def _create_frame_textbox(width , height , texts):
 		global text_i
-
 
 		image_surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, int(round(width * cm)), int(round(height * cm)) )
 		cairo_context = cairo.Context(image_surface)
@@ -92,6 +132,18 @@ def _create_frame_textbox(width , height , texts):
 			font_outline = False
 			text = ""
 			p = texts[i]
+			margin = {'left':0 , 'right':0 , 'top':0 , 'bottom':0}
+			para_style = p['paragraph-style']
+
+			if para_style.has_key('fo:margin-left'):
+				margin['left'] = float(para_style['fo:margin-left'].rstrip('cm')) * cm
+			if para_style.has_key('fo:margin-right'):
+				margin['right'] = float(para_style['fo:margin-right'].rstrip('cm')) * cm
+			if para_style.has_key('fo:margin-top'):
+				margin['top'] = float(para_style['fo:margin-top'].rstrip('cm')) * cm
+			if para_style.has_key('fo:margin-bottom'):
+				margin['bottom'] = float(para_style['fo:margin-bottom'].rstrip('cm'))*cm
+
 			if p['paragraph-style'].has_key('fo:text-align'):
 				text_align = p['paragraph-style']['fo:text-align']
 			else :
@@ -146,10 +198,10 @@ def _create_frame_textbox(width , height , texts):
 				line = iter.get_line()
 				baseline = iter.get_baseline()
 
-#				cairo_context.move_to( xstart + logical[0] , y_pos + logical[1])
-#				_draw_rectangle(logical,(1,0,0),cairo_context)
 #				cairo_context.move_to( xstart + ink[0] - (ink[0] - logical[0])/2.0 , y_pos + ink[1])
 #				_draw_rectangle(ink,(0,1,0),cairo_context)
+				cairo_context.move_to( xstart + logical[0] , y_pos + logical[1])
+				_draw_rectangle(logical,(1,0,0),cairo_context)
 				text_xpos = xstart + logical[0] + (logical[0] - ink[0])/2.0
 				text_ypos = y_pos + baseline/pango.SCALE
 				if bullet is not None and first_line:
@@ -179,20 +231,24 @@ def _create_frame_textbox(width , height , texts):
 					cairo_context.set_source_rgb(0.0,0.0,0.0)
 					cairo_context.stroke_preserve()
 					cairo_context.set_source_rgba(1.0,1.0,1.0,0.9)
-					cairo_context.fill_preserve()
+					cairo_context.fill()
 				else :
 					pangocairo_context.layout_line_path(line)
 					cairo_context.set_source_rgb(0.0,0.0,0.0)
-					cairo_context.fill_preserve()
+					cairo_context.fill()
 					
 				first_line = False
 				lines_remains = iter.next_line()
 				tmp_ypos += logical[3]
 
-			y_pos += tmp_ypos			
-
-		image_surface.write_to_png("./tests/test_cairo/TEST_%s.png" % ("%04d" % text_i))
+			y_pos += tmp_ypos + margin['bottom']
+		image_buffer = StringIO.StringIO() 
+#		image_surface.write_to_png("./tests/test_cairo/TEST_%s.png" % ("%04d" % text_i))
+		image_surface.write_to_png(image_buffer)
+		image_buffer.seek(0)
+		result = {'name' : "FRAME_%04d" % text_i , 'buffer' : image_buffer} 
 		text_i += 1
+		return result
 
 def _get_paragraph_style(element,context) :
 	#FIXME
@@ -202,7 +258,7 @@ def _check_outline_style(style,context):
 	result = None
 	if re.match(r'^(.*-outline)[0-9]+$', style) is not None and context.has_key('list-level'):
 		result = re.sub(r'^(.*-outline)[0-9]+$',r'\1',style)+'%d'%context['list-level']
-		print "Outline style : %s -> %s" % (style,result)
+#		print "Outline style : %s -> %s" % (style,result)
 	return result
 
 def _get_current_styles(element, context):
@@ -310,12 +366,12 @@ class my_document (odf_document) :
 		for s in style_list:
 			styles[s.get_style_name()] = s
 		context = {'document': self , 'styles' : styles , 'level' : 0 ,'rst_mode':False , 'master-page' : None}
-		result = []
+		result = {'pages':[]}
 
 
 		for element in body.get_children():
 			if (element.get_tagname() in ["draw:page"]) :
-				result.append(element.get_formatted_text(context))
+				result['pages'].append(element.get_formatted_text(context))
 
 		return result
 			
@@ -324,7 +380,7 @@ class my_page(odf_draw_page):
 		debug_level(self,1,context)
 
 		page_name = self.get_page_name()
-		page = {page_name : {}}
+		page = {'page_name' : page_name , 'content' :{}}
 		style_name = self.get_attribute("draw:style-name")
 		master_page = self.get_attribute("draw:master-page-name")
 
@@ -338,9 +394,9 @@ class my_page(odf_draw_page):
 		context['master-page'] = master_page
 		for element in self.get_children():
 			tag = element.get_tagname()
-			if(tag not in page[page_name]) : page[page_name][tag] = []
+			if(tag not in page['content']) : page['content'][tag] = []
 			e = element.get_formatted_text(context)
-			if e is not None : page[page_name][tag].append(e)
+			if e is not None : page['content'][tag].append(e)
 
 		debug_level(self,-1,context)
 		return page
@@ -348,21 +404,25 @@ class my_page(odf_draw_page):
 class my_frame(odf_frame):
 	def get_formatted_text(self, context):
 		debug_level(self,1,context)
-		result = []
 
-		height = float(self.get_attribute('svg:height').rstrip('cm'))
-		width = float(self.get_attribute('svg:width').rstrip('cm'))
-		x = float(self.get_attribute('svg:x').rstrip('cm'))
-		y = float(self.get_attribute('svg:y').rstrip('cm'))
+		frame = {'attributes' : {} , 'content': None}
+		frame['attributes']['height'] = float(self.get_attribute('svg:height').rstrip('cm'))
+		frame['attributes']['width'] = float(self.get_attribute('svg:width').rstrip('cm'))
+		frame['attributes']['x'] = float(self.get_attribute('svg:x').rstrip('cm'))
+		frame['attributes']['y'] = float(self.get_attribute('svg:y').rstrip('cm'))
 		
+		result = []
 		for element in self.get_children():
 			t = element.get_formatted_text(context)
+			type = element.get_tagname()
 			if t is not None:
-				result.append(t)
+				result.append( {'type':type , 'content':t} )
 
-		if len(result) > 0 : 
-			_create_frame_textbox(width , height , result[0])
 		debug_level(self,-1,context)
+		if len(result) > 0 : 
+			#_create_frame_textbox(width , height , result[0])
+			frame['content'] = result[0]
+			return frame
 	
 	def get_text_style(self):
 		style_name = self.get_attribute("presentation:style-name")
@@ -390,9 +450,10 @@ class my_image(odf_element):
 	def get_formatted_text(self, context):
 		doc = context['document']
 		debug_level(self,1,context)
-		result = self.get_attribute('xlink:href')
+		name = self.get_attribute('xlink:href')
+		result = doc.get_file_data(name)
 		debug_level(self,-1,context)
-		return None
+		return result
 
 class my_paragraph(odf_paragraph):
 	def get_formatted_text(self, context):
@@ -509,23 +570,78 @@ register_element_class('draw:page', my_page)
 register_element_class('draw:frame', my_frame)
 register_element_class('draw:image', my_image)
 
+def _blenderification(document):
+	current_page = None
+	current_frame = None
+	for page in document['pages']:
+		print "Building ", page['page_name'] , '\n' , pformat(page['content'],depth=1)
+		if page['content'].has_key('draw:frame'):
+			for frame in page['content']['draw:frame']:
+				print pformat(frame,depth=1)
+				image = None
+				if frame['content']['type'] == 'draw:text-box':
+					image = _create_frame_textbox(frame['attributes']['width'] , frame['attributes']['height'] , frame['content']['content'])
+				elif frame['content']['type'] == 'draw:image':
+					image = _create_frame_image(frame['attributes']['width'] , frame['attributes']['height'] , frame['content']['content'])
+
+				if image is not None:	
+					name = image['name']
+					pil_img = image['buffer']
+					img = PIL.Image.open(pil_img)
+					tmpfile = tempfile.NamedTemporaryFile(suffix="BSM.png",delete=False)
+
+					#Save the final image temporary
+					img.save(tmpfile , 'PNG')
+					tmpfile.flush()
+					tmpfile.close()
+
+					b_image = Blender.Image.Load("%s" % tmpfile.name)
+					b_image.setName(name)
+					b_image.pack()
+
+					os.remove(tmpfile.name)
+					b_texture = Blender.Texture.New(name)
+					b_texture.setImage(b_image)
+					b_material = Blender.Material.New(name)
+					b_material.setTexture(0, b_texture , Blender.Texture.TexCo.UV , Blender.Texture.MapTo.COL)
+					if (img.mode == 'RGBA') :
+						b_material.mode |= Blender.Material.Modes.ZTRANSP
+
 if __name__ == "__main__" :
-	usage = "%prog <file>"
+
+	usage = "blender -b <template>.blend -P odp_importer.py -- <file>"
 	description = "a little test with lpOD to parse ODP files"
 	parser = OptionParser (usage , version = __version__ , description = description)
 
-	options , args = parser.parse_args()
+	print sys.argv
+	
+	if Blender.mode == 'background' or Blender.mode == 'interactive':
+		try:
+			script_args_index = sys.argv.index('--')
+			if ( len(sys.argv[script_args_index])>1):
+				real_argv = sys.argv[ (script_args_index + 1):]
+			else:
+				real_argv = []
+		except:
+			parser.error("script arguments start after blender arguments with '--'")
 
+
+	options , args = parser.parse_args(real_argv)
+
+	print real_argv,pformat(options),pformat(args)
 	if(len(args) != 1):
-		parser.print_help()
-		exit(1)
+		parser.error("You must provide ONE filename")
+	if Blender.sys.exists(args[0]) != 1:
+		parser.error("File '%s' does not exist or is not a file" % (args[0]))
+
 	container = odf_get_container(args[0])
 	document = my_document(container)
 	
 	result = document.get_formatted_text()
-#	for r in result: pprint(r)
+	_blenderification(result)
 
-#	elements = document.get_styled_elements()
-#	for e in elements:
-#		print e.get_tagname()
-	
+	blender_file = Blender.sys.makename(args[0],'.blend')
+	Blender.PackAll()
+	Blender.Save(blender_file,1)
+	print "Blender File created at '%s'" % (blender_file)
+
