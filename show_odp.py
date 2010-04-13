@@ -43,6 +43,7 @@ try:
 	from PIL import ImageFont,ImageFile,ImageDraw,Image
 except:
 	print "ERROR : Python Imaging Library is not installed"
+	_third_party_modules = False
 
 # blender imports
 try:
@@ -59,10 +60,11 @@ if not _third_party_modules :
 __version__ = "0.1"
 __elm_debug__ = False
 
-
+#Global variables
 text_i = 0
 dpi = 72.0
 cm = dpi / 2.54
+bg_images = {}
 
 def debug_level(element,inc_lvl,context):
 		context['level'] += inc_lvl
@@ -82,6 +84,7 @@ def _get_pango_span ( text_prop):
 			font_underline = 'single'
 		else :
 			font_underline = 'single'
+	else : font_underline = 'none'
 	return ( u'<span face="%s" size="%s" style="%s" weight="%s" underline="%s">' % ( font_family,font_size,font_style, font_weight , font_underline) )
 
 def _create_frame_image(width,height,image):
@@ -200,8 +203,8 @@ def _create_frame_textbox(width , height , texts):
 
 #				cairo_context.move_to( xstart + ink[0] - (ink[0] - logical[0])/2.0 , y_pos + ink[1])
 #				_draw_rectangle(ink,(0,1,0),cairo_context)
-				cairo_context.move_to( xstart + logical[0] , y_pos + logical[1])
-				_draw_rectangle(logical,(1,0,0),cairo_context)
+#				cairo_context.move_to( xstart + logical[0] , y_pos + logical[1])
+#				_draw_rectangle(logical,(1,0,0),cairo_context)
 				text_xpos = xstart + logical[0] + (logical[0] - ink[0])/2.0
 				text_ypos = y_pos + baseline/pango.SCALE
 				if bullet is not None and first_line:
@@ -377,20 +380,45 @@ class my_document (odf_document) :
 			
 class my_page(odf_draw_page):
 	def get_formatted_text(self, context):
+		global bg_images
 		debug_level(self,1,context)
 
 		page_name = self.get_page_name()
-		page = {'page_name' : page_name , 'content' :{}}
+		page = {'page_name' : page_name , 'attributes':None, 'content' :{}}
 		style_name = self.get_attribute("draw:style-name")
 		master_page = self.get_attribute("draw:master-page-name")
 
+		page['attributes'] = {'name':page_name , 'width':0 , 'height':0 , 'background':None , 'background-type':None}
 
 		mp = document.get_style("master-page" , master_page)
 		master_dp  = document.get_style("drawing-page",mp.get_attribute("draw:style-name"))
 		default_dp = document.get_style("drawing-page",style_name)
 		background = document.get_style("presentation",master_page+"-background")
-		
-		page_attr = {'name':page_name , 'width':0 , 'height':0 , 'background':None , 'background-type':None}
+		bg_prop = background.get_style_properties('graphic')
+
+#		print background.get_style_properties('graphic')
+		page_layout = context['styles'][mp.get_attribute('style:page-layout-name')]
+#		print page_layout , page_layout.get_style_properties('page-layout')
+		page_layout_prop = page_layout.get_style_properties('page-layout')
+		page['attributes']['width'] = page_layout_prop['fo:page-width']
+		page['attributes']['height'] = page_layout_prop['fo:page-height']
+		styles = document.get_xmlpart('styles')
+		if bg_prop.has_key('draw:fill-image-name'):
+			e = styles.get_element('//draw:fill-image[@draw:name="%s"]'%(bg_prop['draw:fill-image-name']))
+#			page['attributes']['background'] = document.get_file_data
+			if e is not None:
+				e_attr = e.get_attributes()
+				if e_attr.has_key('xlink:href') :
+					bg_img_name = e_attr['xlink:href']
+					page['attributes']['background'] = bg_prop['draw:fill-image-name']
+					if (bg_prop['draw:fill-image-name'] not in bg_images.keys()) :
+						img_buf = StringIO.StringIO()
+						img_buf.write(document.get_file_data(bg_img_name))
+						img_buf.flush()
+						img_buf.seek(0)
+						bg_images[bg_prop['draw:fill-image-name']]={}
+						bg_images[bg_prop['draw:fill-image-name']]['data'] = img_buf
+			
 		context['master-page'] = master_page
 		for element in self.get_children():
 			tag = element.get_tagname()
@@ -571,14 +599,60 @@ register_element_class('draw:frame', my_frame)
 register_element_class('draw:image', my_image)
 
 def _blenderification(document):
-	current_page = None
+	global bg_images
+	current_page = {'b_name' : '' , 'b_object' : None}
 	current_frame = None
+
+	#Get the presentation Scene
+	scene = Blender.Scene.Get('Presentation')
+	slides = Blender.Object.Get('Slides')
+
+	page_i = 0
+	page_str = "Page_%%0%d" % len(str(len(document['pages'])))+"d"
+	print page_str
+
 	for page in document['pages']:
-		print "Building ", page['page_name'] , '\n' , pformat(page['content'],depth=1)
+		#Build the current page
+		page_i += 1
+		print "Building ", page['page_name'] , "=>" , page_str % (page_i) ,'\n' , pformat(page['attributes'],depth=1), '\n' , pformat(page['content'],depth=1)
+		page_position = {'x':0 , 'y':1 * page_i , 'z' : 0 }
+
+		i_page_name = page_str % (page_i)
+		page_width = float( page['attributes']['width'].replace('cm','') )
+		page_height = float( page['attributes']['height'].replace('cm','') )
+		ratio_x = page_width
+		ratio_y = page_height
+#		print ratio_x , ratio_y
+		coord = [ [ratio_x/2,0,ratio_y/2] , [ratio_x/2,0,-ratio_y/2] , [-ratio_x/2,0,-ratio_y/2] , [-ratio_x/2 , 0 , ratio_y/2] ]
+		faces = [ [ 3 , 2 , 1 , 0] ]
+
+		me = bpy.data.meshes.new(i_page_name)
+
+		me.verts.extend(coord)
+		me.faces.extend(faces)
+		uv = ( Mathutils.Vector([1,0]) , Mathutils.Vector([1,1]) , Mathutils.Vector([0,1]) , Mathutils.Vector([0,0]) )
+		for i in me.faces:
+			i.uv = uv
+		bg_image_name = page['attributes']['background']
+		if bg_image_name is not None:
+			if bg_images[bg_image_name].has_key('material') is not True:
+				bg_image_data = bg_images[bg_image_name]['data']
+				bg_images[bg_image_name]['material'] = _create_materials(bg_image_data , bg_image_name, use_alpha = False)
+			me.materials = [ bg_images[bg_image_name]['material'] ]
+
+		b_page = scene.objects.new(me)
+		b_page.setLocation( page_position['x'] , page_position['y'] , page_position['z'] )
+		b_page.makeDisplayList() 
+		
+		slides.makeParent([b_page],0,0)
+
 		if page['content'].has_key('draw:frame'):
+			#Build frames in the current page
 			for frame in page['content']['draw:frame']:
 				print pformat(frame,depth=1)
 				image = None
+				frame_pos = {}
+				
 				if frame['content']['type'] == 'draw:text-box':
 					image = _create_frame_textbox(frame['attributes']['width'] , frame['attributes']['height'] , frame['content']['content'])
 				elif frame['content']['type'] == 'draw:image':
@@ -587,25 +661,54 @@ def _blenderification(document):
 				if image is not None:	
 					name = image['name']
 					pil_img = image['buffer']
-					img = PIL.Image.open(pil_img)
-					tmpfile = tempfile.NamedTemporaryFile(suffix="BSM.png",delete=False)
+					b_material = _create_materials(pil_img , name)
+					ratio_x = frame['attributes']['width']
+					ratio_y = frame['attributes']['height']
+					pos_x = frame['attributes']['x']
+					pos_y = frame['attributes']['y'] + ratio_y
+#					coord = [ [ratio_x/2,0,ratio_y/2] , [ratio_x/2,0,-ratio_y/2] , [-ratio_x/2,0,-ratio_y/2] , [-ratio_x/2 , 0 , ratio_y/2] ]
+					coord = [ [ratio_x,0,ratio_y] , [ratio_x,0,0] , [0,0,0] , [0 , 0 , ratio_y] ]
+					faces = [ [ 3 , 2 , 1 , 0] ]
 
-					#Save the final image temporary
-					img.save(tmpfile , 'PNG')
-					tmpfile.flush()
-					tmpfile.close()
+					me = bpy.data.meshes.new(name)
 
-					b_image = Blender.Image.Load("%s" % tmpfile.name)
-					b_image.setName(name)
-					b_image.pack()
+					me.verts.extend(coord)
+					me.faces.extend(faces)
+					uv = ( Mathutils.Vector([1,0]) , Mathutils.Vector([1,1]) , Mathutils.Vector([0,1]) , Mathutils.Vector([0,0]) )
+					for i in me.faces:
+						i.uv = uv
 
-					os.remove(tmpfile.name)
-					b_texture = Blender.Texture.New(name)
-					b_texture.setImage(b_image)
-					b_material = Blender.Material.New(name)
-					b_material.setTexture(0, b_texture , Blender.Texture.TexCo.UV , Blender.Texture.MapTo.COL)
-					if (img.mode == 'RGBA') :
-						b_material.mode |= Blender.Material.Modes.ZTRANSP
+					me.materials = [b_material]
+					b_frame = scene.objects.new(me)
+					b_frame.setLocation( page_position['x'] - (page_width/2.0) + pos_x, page_position['y'] - 0.1 , page_position['z'] + (page_height/2.0) - pos_y )
+					b_frame.makeDisplayList() 
+					b_page.makeParent([b_frame],0,0)
+		
+
+def _create_materials(pil_img , name , use_alpha = True):
+		img = PIL.Image.open(pil_img)
+		tmpfile = tempfile.NamedTemporaryFile(suffix="BSS.png",delete=False)
+
+		#Save the final image temporary
+		img.save(tmpfile , 'PNG')
+		tmpfile.flush()
+		tmpfile.close()
+
+		b_image = Blender.Image.Load("%s" % tmpfile.name)
+		b_image.setName(name)
+		b_image.pack()
+
+		b_texture = Blender.Texture.New(name)
+		b_texture.setImage(b_image)
+		b_texture.setExtend('Clip')
+		pprint(Blender.Texture.ImageFlags)
+		b_texture.setImageFlags('UseAlpha')
+		b_material = Blender.Material.New(name)
+		b_material.setTexture(0, b_texture , Blender.Texture.TexCo.UV , Blender.Texture.MapTo.COL)
+		if (use_alpha and img.mode == 'RGBA') :
+			b_material.mode |= Blender.Material.Modes.ZTRANSP
+		os.remove(tmpfile.name)
+		return b_material
 
 if __name__ == "__main__" :
 
@@ -639,7 +742,6 @@ if __name__ == "__main__" :
 	
 	result = document.get_formatted_text()
 	_blenderification(result)
-
 	blender_file = Blender.sys.makename(args[0],'.blend')
 	Blender.PackAll()
 	Blender.Save(blender_file,1)
