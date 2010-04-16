@@ -62,7 +62,7 @@ __elm_debug__ = False
 
 #Global variables
 text_i = 0
-dpi = 72.0
+dpi = 92.0
 cm = dpi / 2.54
 bg_images = {}
 
@@ -158,12 +158,20 @@ def _create_frame_textbox(width , height , texts):
 				pango_layout.set_alignment(pango.ALIGN_CENTER)
 			elif text_align == 'end':
 				pango_layout.set_alignment(pango.ALIGN_RIGHT)
-			for t in p['texts']:
-				if t.has_key('text-style'):
-					if t['text-style']['style:text-outline'] == 'true' : font_outline = True
-					text += _get_pango_span(t['text-style']) + t['text-content'] + "</span>"
-				else:
-					text += t['text-content']
+			if len(p['texts'])>0:
+				for t in p['texts']:
+					pprint(t,depth=1)
+					if type(t) is dict:					
+						if t.has_key('text-style'):
+							if t['text-style']['style:text-outline'] == 'true' : font_outline = True
+							text += _get_pango_span(t['text-style']) + t['text-content'] + "</span>"
+						else:
+							text += _get_pango_span(p['text-style']) + t['text-content'] + "</span>"
+					elif type(t) is unicode:
+						text += _get_pango_span(p['text-style']) + t + "</span>"
+			else:
+				text = _get_pango_span(p['text-style']) + ' ' + "</span>"
+			pprint(text)
 			if p.has_key('bullet'):
 				bullet_layout = pangocairo_context.create_layout()
 				bullet_layout.set_width(int(round(width * cm)) * pango.SCALE)
@@ -233,7 +241,7 @@ def _create_frame_textbox(width , height , texts):
 					cairo_context.set_line_width(2.0)
 					cairo_context.set_source_rgb(0.0,0.0,0.0)
 					cairo_context.stroke_preserve()
-					cairo_context.set_source_rgba(1.0,1.0,1.0,0.9)
+					cairo_context.set_source_rgba(1.0,1.0,1.0,1.0)
 					cairo_context.fill()
 				else :
 					pangocairo_context.layout_line_path(line)
@@ -450,6 +458,7 @@ class my_frame(odf_frame):
 		if len(result) > 0 : 
 			#_create_frame_textbox(width , height , result[0])
 			frame['content'] = result[0]
+			#pprint(frame)
 			return frame
 	
 	def get_text_style(self):
@@ -462,7 +471,7 @@ class my_textbox(odf_element):
 		result = []
 		for element in self.get_children():
 			t = element.get_formatted_text(context)
-			if t is not None:
+			if (t is not None):
 				result.extend(t)
 
 		debug_level(self,-1,context)
@@ -490,11 +499,14 @@ class my_paragraph(odf_paragraph):
 		styles = _get_current_styles(self,context)
 		paragraph = {}
 		paragraph['paragraph-style'] = _get_paragraph_style(styles,context)
+		paragraph['text-style'] = _get_text_style(styles,context)
 		paragraph['texts'] = []
 		for children in _get_text_children(self) :
 			if type(children) is not odf_text:
+				print children
 				t = children.get_formatted_text(context)
 				if t is not None:
+					pprint(t,depth=1)
 					paragraph['texts'].append(t)
 			else:
 				text = {}
@@ -529,15 +541,21 @@ class my_span(odf_span):
 	def get_formatted_text(self,context):
 		debug_level(self,-1,context)
 		styles = _get_current_styles(self,context)
-		text = {}
+		text = {'text-content':''}
 		for children in _get_text_children(self) :
+			print children
 			if type(children) is not odf_text:
-				children.get_formatted_text(context)
+				t = children.get_formatted_text(context)
+				if t is not None:
+					if type(t) is unicode:
+						text['text-content'] += t
+					elif type(t) is dict:
+						text['text-content'] += t['text-content']
 			else :
 				text['text-style'] = _get_text_style(styles,context)
-				text['text-content'] = children
+				text['text-content'] += children
 		debug_level(self,1,context)
-		if len(text) > 0:
+		if len(text['text-content']) > 0:
 			return text
 		else:
 			return None
@@ -584,13 +602,38 @@ class my_list_item(odf_element):
 
 class my_line_break(odf_element):
 	def get_formatted_text(self,context):
+		pprint(self.get_attributes() )
 		text = {}
 		text['text-content'] = u"\n"
 		return text
 
+class my_text_tab(odf_element):
+	def get_formatted_text(self,context):
+		styles = _get_current_styles(self,context)
+		pprint(self.get_attributes() )
+		text = {}
+		text['text-style'] =  _get_text_style(styles,context)
+		text['text-content'] = u"\t"
+		return text
+
+class my_text_space(odf_element):
+	def get_formatted_text(self,context):
+		styles = _get_current_styles(self,context)
+		pprint(self.get_attributes() )
+		attr = self.get_attributes()
+		count = 1
+		if attr.has_key('text:c') : count = int(attr['text:c'])
+		text = {}
+		text['text-style'] =  _get_text_style(styles,context)
+		text['text-content'] = u' ' * count
+		return text
+
 register_element_class('text:p', my_paragraph)
 register_element_class('text:span', my_span)
+register_element_class('text:a', my_span)
 register_element_class('text:line-break', my_line_break)
+register_element_class('text:tab', my_text_tab)
+register_element_class('text:s', my_text_space)
 register_element_class('text:list', my_list)
 register_element_class('text:list-item', my_list_item)
 register_element_class('draw:text-box', my_textbox)
@@ -648,7 +691,9 @@ def _blenderification(document):
 
 		if page['content'].has_key('draw:frame'):
 			#Build frames in the current page
+			i_frame = 0
 			for frame in page['content']['draw:frame']:
+				i_frame += 1
 				print pformat(frame,depth=1)
 				image = None
 				frame_pos = {}
@@ -680,7 +725,7 @@ def _blenderification(document):
 
 					me.materials = [b_material]
 					b_frame = scene.objects.new(me)
-					b_frame.setLocation( page_position['x'] - (page_width/2.0) + pos_x, page_position['y'] - 0.1 , page_position['z'] + (page_height/2.0) - pos_y )
+					b_frame.setLocation( page_position['x'] - (page_width/2.0) + pos_x, page_position['y'] - (0.01 * i_frame) , page_position['z'] + (page_height/2.0) - pos_y )
 					b_frame.makeDisplayList() 
 					b_page.makeParent([b_frame],0,0)
 		
@@ -700,9 +745,10 @@ def _create_materials(pil_img , name , use_alpha = True):
 
 		b_texture = Blender.Texture.New(name)
 		b_texture.setImage(b_image)
-		b_texture.setExtend('Clip')
-		pprint(Blender.Texture.ImageFlags)
-		b_texture.setImageFlags('UseAlpha')
+		b_texture.setExtend('ClipCube')
+		#pprint(Blender.Texture.ImageFlags)
+		#pprint(Blender.Texture.ExtendModes)
+		b_texture.setImageFlags('UseAlpha','MipMap')
 		b_material = Blender.Material.New(name)
 		b_material.setTexture(0, b_texture , Blender.Texture.TexCo.UV , Blender.Texture.MapTo.COL)
 		if (use_alpha and img.mode == 'RGBA') :
