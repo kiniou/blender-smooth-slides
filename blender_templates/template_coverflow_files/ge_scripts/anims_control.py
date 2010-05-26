@@ -113,7 +113,8 @@ def update_slides_pos():
                     c.visible = True
             #slide.position = [ diff*4 + dx , -( 1 - fabs(diff) ) * 6 ,0 ]
             if (fabs(dx) >= 1.0):
-                faceup_len = fabs(diff) * 0.01 * cm
+#                faceup_len = fabs(diff) * 0.01 * cm
+                faceup_len = 0
             else:
                 faceup_len = ( 1 - fabs(dx) ) * -1.75 * cm
 
