@@ -14,17 +14,6 @@ import math
 import tempfile
 import StringIO
 
-# lpod imports
-from tools.lpod.document import odf_document, odf_get_document
-from tools.lpod.container import odf_container , odf_get_container
-from tools.lpod.paragraph import odf_paragraph
-from tools.lpod.span import odf_span
-from tools.lpod.frame import odf_frame
-from tools.lpod.draw_page import odf_draw_page
-from tools.lpod.list import odf_list
-from tools.lpod.element import odf_element, register_element_class, odf_text
-from tools.lpod.style import odf_style
-from tools.lpod.utils import _get_element_list , _get_element
 
 _third_party_modules = True
 
@@ -62,9 +51,8 @@ __elm_debug__ = False
 
 #Global variables
 text_i = 0
-dpi = 92.0
+dpi = 150.0
 cm = dpi / 2.54
-bg_images = {}
 
 def debug_level(element,inc_lvl,context):
 		context['level'] += inc_lvl
@@ -160,7 +148,7 @@ def _create_frame_textbox(width , height , texts):
 				pango_layout.set_alignment(pango.ALIGN_RIGHT)
 			if len(p['texts'])>0:
 				for t in p['texts']:
-					pprint(t,depth=1)
+					#pprint(t,depth=1)
 					if type(t) is dict:					
 						if t.has_key('text-style'):
 							if t['text-style']['style:text-outline'] == 'true' : font_outline = True
@@ -171,7 +159,7 @@ def _create_frame_textbox(width , height , texts):
 						text += _get_pango_span(p['text-style']) + t + "</span>"
 			else:
 				text = _get_pango_span(p['text-style']) + ' ' + "</span>"
-			pprint(text)
+			#pprint(text)
 			if p.has_key('bullet'):
 				bullet_layout = pangocairo_context.create_layout()
 				bullet_layout.set_width(int(round(width * cm)) * pango.SCALE)
@@ -361,288 +349,9 @@ def _get_paragraph_style ( style_names , context):
 			result.update(para_prop)
 	return result
 
-def _get_text_children(element):
-	return element.xpath('*|text()')
-
-class my_document (odf_document) :
-
-	def get_formatted_text(self):
-		type = self.get_type()
-		if type not in ('presentation'):
-			raise NotImplementedError, ('Type of document "%s" not supported yet' % type)
-
-		body = self.get_body()
-		style_list = self.get_style_list()
-		styles = {}
-		for s in style_list:
-			styles[s.get_style_name()] = s
-		context = {'document': self , 'styles' : styles , 'level' : 0 ,'rst_mode':False , 'master-page' : None}
-		result = {'pages':[]}
-
-
-		for element in body.get_children():
-			if (element.get_tagname() in ["draw:page"]) :
-				result['pages'].append(element.get_formatted_text(context))
-
-		return result
-			
-class my_page(odf_draw_page):
-	def get_formatted_text(self, context):
-		global bg_images
-		debug_level(self,1,context)
-
-		page_name = self.get_page_name()
-		page = {'page_name' : page_name , 'attributes':None, 'content' :{}}
-		style_name = self.get_attribute("draw:style-name")
-		master_page = self.get_attribute("draw:master-page-name")
-
-		page['attributes'] = {'name':page_name , 'width':0 , 'height':0 , 'background':None , 'background-type':None}
-
-		mp = document.get_style("master-page" , master_page)
-		master_dp  = document.get_style("drawing-page",mp.get_attribute("draw:style-name"))
-		default_dp = document.get_style("drawing-page",style_name)
-		background = document.get_style("presentation",master_page+"-background")
-		bg_prop = background.get_style_properties('graphic')
-
-#		print background.get_style_properties('graphic')
-		page_layout = context['styles'][mp.get_attribute('style:page-layout-name')]
-#		print page_layout , page_layout.get_style_properties('page-layout')
-		page_layout_prop = page_layout.get_style_properties('page-layout')
-		page['attributes']['width'] = page_layout_prop['fo:page-width']
-		page['attributes']['height'] = page_layout_prop['fo:page-height']
-		styles = document.get_xmlpart('styles')
-		if bg_prop.has_key('draw:fill-image-name'):
-			e = styles.get_element('//draw:fill-image[@draw:name="%s"]'%(bg_prop['draw:fill-image-name']))
-#			page['attributes']['background'] = document.get_file_data
-			if e is not None:
-				e_attr = e.get_attributes()
-				if e_attr.has_key('xlink:href') :
-					bg_img_name = e_attr['xlink:href']
-					page['attributes']['background'] = bg_prop['draw:fill-image-name']
-					if (bg_prop['draw:fill-image-name'] not in bg_images.keys()) :
-						img_buf = StringIO.StringIO()
-						img_buf.write(document.get_file_data(bg_img_name))
-						img_buf.flush()
-						img_buf.seek(0)
-						bg_images[bg_prop['draw:fill-image-name']]={}
-						bg_images[bg_prop['draw:fill-image-name']]['data'] = img_buf
-			
-		context['master-page'] = master_page
-		for element in self.get_children():
-			tag = element.get_tagname()
-			if(tag not in page['content']) : page['content'][tag] = []
-			e = element.get_formatted_text(context)
-			if e is not None : page['content'][tag].append(e)
-
-		debug_level(self,-1,context)
-		return page
-
-class my_frame(odf_frame):
-	def get_formatted_text(self, context):
-		debug_level(self,1,context)
-
-		frame = {'attributes' : {} , 'content': None}
-		frame['attributes']['height'] = float(self.get_attribute('svg:height').rstrip('cm'))
-		frame['attributes']['width'] = float(self.get_attribute('svg:width').rstrip('cm'))
-		frame['attributes']['x'] = float(self.get_attribute('svg:x').rstrip('cm'))
-		frame['attributes']['y'] = float(self.get_attribute('svg:y').rstrip('cm'))
-		
-		result = []
-		for element in self.get_children():
-			t = element.get_formatted_text(context)
-			type = element.get_tagname()
-			if t is not None:
-				result.append( {'type':type , 'content':t} )
-
-		debug_level(self,-1,context)
-		if len(result) > 0 : 
-			#_create_frame_textbox(width , height , result[0])
-			frame['content'] = result[0]
-			#pprint(frame)
-			return frame
-	
-	def get_text_style(self):
-		style_name = self.get_attribute("presentation:style-name")
-		return style_name
-
-class my_textbox(odf_element):
-	def get_formatted_text(self, context):
-		debug_level(self,1,context)
-		result = []
-		for element in self.get_children():
-			t = element.get_formatted_text(context)
-			if (t is not None):
-				result.extend(t)
-
-		debug_level(self,-1,context)
-		if len(result)>0:
-			return result
-		else:
-			return None
-
-	def get_text_style(self):
-		return self.get_attribute('draw:text-style-name')
-
-class my_image(odf_element):
-	def get_formatted_text(self, context):
-		doc = context['document']
-		debug_level(self,1,context)
-		name = self.get_attribute('xlink:href')
-		result = doc.get_file_data(name)
-		debug_level(self,-1,context)
-		return result
-
-class my_paragraph(odf_paragraph):
-	def get_formatted_text(self, context):
-		debug_level(self,-1,context)
-
-		styles = _get_current_styles(self,context)
-		paragraph = {}
-		paragraph['paragraph-style'] = _get_paragraph_style(styles,context)
-		paragraph['text-style'] = _get_text_style(styles,context)
-		paragraph['texts'] = []
-		for children in _get_text_children(self) :
-			if type(children) is not odf_text:
-				print children
-				t = children.get_formatted_text(context)
-				if t is not None:
-					pprint(t,depth=1)
-					paragraph['texts'].append(t)
-			else:
-				text = {}
-				bullet = {}
-				text['text-style'] = _get_text_style(styles,context)
-				if context.has_key("list-level") : 
-					bullet['text-style'] = _get_text_style(styles,context)
-					list_style = _get_list_style(styles,context,context['list-level'])
-					bullet['list-style'] = list_style
-					if list_style.has_key('fo:font-size') and list_style['fo:font-size'].endswith('%'):
-						old_size = float(bullet['text-style']['fo:font-size'].rstrip('pt'))
-						lst_size = float(list_style['fo:font-size'].rstrip('%'))/100.0
-						new_size = old_size * lst_size
-						bullet['text-style']['fo:font-size']   = "%dpt" % new_size
-						bullet['text-style']['fo:font-size_old'] = "%dpt" % old_size
-					if list_style.has_key('fo:font-family'):
-						bullet['text-style']['fo:font-family_old'] = bullet['text-style']['fo:font-family']
-						bullet['text-style']['fo:font-family'] = list_style['fo:font-family']
-
-					bullet['text-content'] = "%s " % ( list_style['text:bullet-char'])
-#					s = "%s%s %s" % ('\t'*(context['list-level']-1) , list_style['text:bullet-char'] , children)
-					
-				text['text-content'] = children
-				paragraph['texts'].append(text)
-				if len(bullet) > 0:
-					paragraph['bullet'] = bullet
-		
-		debug_level(self,1,context)
-		return [paragraph]
-
-class my_span(odf_span):
-	def get_formatted_text(self,context):
-		debug_level(self,-1,context)
-		styles = _get_current_styles(self,context)
-		text = {'text-content':''}
-		for children in _get_text_children(self) :
-			print children
-			if type(children) is not odf_text:
-				t = children.get_formatted_text(context)
-				if t is not None:
-					if type(t) is unicode:
-						text['text-content'] += t
-					elif type(t) is dict:
-						text['text-content'] += t['text-content']
-			else :
-				text['text-style'] = _get_text_style(styles,context)
-				text['text-content'] += children
-		debug_level(self,1,context)
-		if len(text['text-content']) > 0:
-			return text
-		else:
-			return None
-		
-
-class my_list(odf_list):
-	def get_formatted_text(self, context):
-		debug_level(self,-1,context)
-		if not context.has_key('list-level') : context['list-level'] = 0
-		context['list-level'] += 1
-		result = []
-		for children in _get_text_children(self) :
-			if type(children) is not odf_text:
-				r = children.get_formatted_text(context)
-				if r is not None:
-					result.extend(r)
-			else :
-				print "LIST '%-20s' : %s" % (self.get_tagname(),children)
-		context['list-level'] -= 1
-		if context['list-level'] == 0 :
-			del context['list-level']
-		debug_level(self,1,context)
-		if len(result) > 0:
-			return result
-		else :
-			return None
-
-class my_list_item(odf_element):
-	def get_formatted_text(self,context):
-		debug_level(self,-1,context)
-		result = []
-		for children in _get_text_children(self) :
-			if type(children) is not odf_text:
-				r = children.get_formatted_text(context)
-				if r is not None:
-					result.extend(r)
-			else :
-				print "LIST-ITEM '-%20s' : %s" % (self.get_tagname(),children) , list_style
-		debug_level(self,1,context)
-		if len(result) > 0:
-			return result
-		else :
-			return None
-
-class my_line_break(odf_element):
-	def get_formatted_text(self,context):
-		pprint(self.get_attributes() )
-		text = {}
-		text['text-content'] = u"\n"
-		return text
-
-class my_text_tab(odf_element):
-	def get_formatted_text(self,context):
-		styles = _get_current_styles(self,context)
-		pprint(self.get_attributes() )
-		text = {}
-		text['text-style'] =  _get_text_style(styles,context)
-		text['text-content'] = u"\t"
-		return text
-
-class my_text_space(odf_element):
-	def get_formatted_text(self,context):
-		styles = _get_current_styles(self,context)
-		pprint(self.get_attributes() )
-		attr = self.get_attributes()
-		count = 1
-		if attr.has_key('text:c') : count = int(attr['text:c'])
-		text = {}
-		text['text-style'] =  _get_text_style(styles,context)
-		text['text-content'] = u' ' * count
-		return text
-
-register_element_class('text:p', my_paragraph)
-register_element_class('text:span', my_span)
-register_element_class('text:a', my_span)
-register_element_class('text:line-break', my_line_break)
-register_element_class('text:tab', my_text_tab)
-register_element_class('text:s', my_text_space)
-register_element_class('text:list', my_list)
-register_element_class('text:list-item', my_list_item)
-register_element_class('draw:text-box', my_textbox)
-register_element_class('draw:page', my_page)
-register_element_class('draw:frame', my_frame)
-register_element_class('draw:image', my_image)
 
 def _blenderification(document):
-	global bg_images
+	bg_images=document['bg_images']
 	current_page = {'b_name' : '' , 'b_object' : None}
 	current_frame = None
 
@@ -694,7 +403,7 @@ def _blenderification(document):
 			i_frame = 0
 			for frame in page['content']['draw:frame']:
 				i_frame += 1
-				print pformat(frame,depth=1)
+				#print pformat(frame,depth=1)
 				image = None
 				frame_pos = {}
 				
@@ -776,17 +485,24 @@ if __name__ == "__main__" :
 
 
 	options , args = parser.parse_args(real_argv)
+#	options , args = parser.parse_args()
 
-	print real_argv,pformat(options),pformat(args)
+#	print real_argv,pformat(options),pformat(args)
 	if(len(args) != 1):
 		parser.error("You must provide ONE filename")
-	if Blender.sys.exists(args[0]) != 1:
+	if os.path.exists(args[0]) != 1:
 		parser.error("File '%s' does not exist or is not a file" % (args[0]))
 
-	container = odf_get_container(args[0])
-	document = my_document(container)
+#	container = odf_get_container(args[0])
+#	document = my_document(container)
 	
-	result = document.get_formatted_text()
+#	result = document.get_formatted_text()
+
+
+	import pickle
+	output = open(args[0], 'r')
+	result = pickle.load(output)
+	output.close()
 	_blenderification(result)
 	blender_file = Blender.sys.makename(args[0],'.blend')
 	Blender.PackAll()
