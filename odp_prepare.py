@@ -791,10 +791,11 @@ if __name__ == "__main__" :
 
 
 	import pickle
+	import codecs
 	pathname = os.path.splitext(args[0])
 	output_name = pathname[0]+'.pkl'
 	output = open(output_name, 'wb')
-	pickle.dump(result,output)
+	s = pickle.dump(result, output , protocol=0)
 	output.close()
 	print "Pickle File created at '%s'" % (output_name)
 
